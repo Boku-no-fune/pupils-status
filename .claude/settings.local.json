@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip install:*)",
+      "Bash(python3 -m alembic init alembic)",
+      "Bash(/usr/local/opt/python@3.9/bin/python3.9 -m alembic init alembic)",
+      "Bash(npm create:*)",
+      "Bash(ls /usr/local/bin/node*)",
+      "Read(//opt/homebrew/bin/**)",
+      "Read(//Users/TT/.nvm/versions/**)",
+      "Read(//usr/local/lib/**)",
+      "Read(//Users/TT/Downloads/**)",
+      "Read(//Users/TT/**)",
+      "Read(//Applications/**)",
+      "Bash(/opt/homebrew/bin/brew list:*)",
+      "Bash(/usr/local/opt/python@3.9/bin/python3.9 -c \"import sys; sys.path.insert\\(0, '.'\\); from app.models import *; print\\('Models OK'\\)\")",
+      "Bash(/usr/local/opt/python@3.9/bin/pip3.9 install:*)",
+      "Bash(/usr/local/opt/python@3.9/bin/python3.9 -c ':*)"
+    ]
+  }
+}
