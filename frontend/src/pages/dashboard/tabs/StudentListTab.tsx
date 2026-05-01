@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Search, ChevronUp, ChevronDown, Minus } from 'lucide-react'
 import { dashboardApi } from '@/api/dashboard'
@@ -37,7 +37,7 @@ export default function StudentListTab() {
         page,
         per_page: perPage,
       }),
-    keepPreviousData: true,
+    placeholderData: keepPreviousData,
   })
 
   const totalPages = data ? Math.ceil(data.total / perPage) : 1
