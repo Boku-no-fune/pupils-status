@@ -6,14 +6,16 @@
 
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, User, Calendar, TrendingUp, Phone, CreditCard, Target, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, Calendar, TrendingUp, Phone, CreditCard, Target, AlertTriangle, MessageSquare } from 'lucide-react'
 import { studentsApi } from '@/api/students'
 import { gradeLabel } from '@/components/ui/GradeLabel'
-import { StudentStatusBadge, AttendanceBadge, SalesStatusBadge, RiskBadge } from '@/components/ui/Badge'
+import { StudentStatusBadge, SalesStatusBadge, RiskBadge } from '@/components/ui/Badge'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import AttendanceCalendar from '@/components/charts/AttendanceCalendar'
 import ScoreBarChart from '@/components/charts/ScoreBarChart'
 import ScoreRadarChart from '@/components/charts/ScoreRadarChart'
+import PhotoUpload from '@/components/ui/PhotoUpload'
+import StaffNoteSection from '@/components/ui/StaffNoteSection'
 import type { StudentStatus, RiskLevel } from '@/types'
 
 export default function StudentDetailPage() {
@@ -71,9 +73,7 @@ export default function StudentDetailPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 bg-blue-100 rounded-full flex items-center justify-center">
-              <User size={24} className="text-blue-600" />
-            </div>
+            <PhotoUpload studentId={student.id} photoData={student.photo_data} />
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{student.name}</h1>
               <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
@@ -219,6 +219,11 @@ export default function StudentDetailPage() {
               </div>
             </Section>
           )}
+
+          {/* スタッフ記録 */}
+          <Section icon={MessageSquare} title="スタッフ記録">
+            <StaffNoteSection studentId={student.id} notes={student.staff_notes || []} />
+          </Section>
 
           {/* 保護者コンタクト */}
           <Section icon={Phone} title="保護者コンタクト">

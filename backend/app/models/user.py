@@ -34,3 +34,4 @@ class User(Base):
                                  foreign_keys="SalesAction.assigned_to")
     checked_homeworks = relationship("Homework", back_populates="checker")
     created_sales_goals = relationship("SalesGoal", back_populates="creator")
+    staff_notes = relationship("StaffNote", back_populates="teacher")

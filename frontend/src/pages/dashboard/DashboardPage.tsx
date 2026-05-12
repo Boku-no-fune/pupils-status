@@ -1,11 +1,11 @@
 /**
  * ダッシュボードメインページ
- * 4タブ構成: 生徒一覧 / 出欠・成績 / 営業目標 / リスク・AI提案
+ * 5タブ構成: 生徒一覧 / 出欠・成績 / 営業目標 / リスク・AI提案 / 学習進捗
  */
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Users, TrendingUp, Target, AlertTriangle } from 'lucide-react'
+import { Users, TrendingUp, Target, AlertTriangle, BookOpen } from 'lucide-react'
 import clsx from 'clsx'
 import { dashboardApi } from '@/api/dashboard'
 import StatCard from '@/components/ui/StatCard'
@@ -14,12 +14,14 @@ import StudentListTab from './tabs/StudentListTab'
 import AttendanceScoreTab from './tabs/AttendanceScoreTab'
 import SalesTab from './tabs/SalesTab'
 import RiskTab from './tabs/RiskTab'
+import LearningProgressTab from './tabs/LearningProgressTab'
 
 const TABS = [
   { id: 'students', label: '生徒一覧・ステータス', icon: Users },
   { id: 'charts', label: '出欠・成績グラフ', icon: TrendingUp },
   { id: 'sales', label: '営業目標・アプローチ', icon: Target },
   { id: 'risk', label: 'リスク・AI提案', icon: AlertTriangle },
+  { id: 'learning', label: '学習進捗', icon: BookOpen },
 ]
 
 export default function DashboardPage() {
@@ -111,6 +113,7 @@ export default function DashboardPage() {
           {activeTab === 'charts' && <AttendanceScoreTab />}
           {activeTab === 'sales' && <SalesTab />}
           {activeTab === 'risk' && <RiskTab />}
+          {activeTab === 'learning' && <LearningProgressTab />}
         </div>
       </div>
     </div>

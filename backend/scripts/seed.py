@@ -29,6 +29,7 @@ from app.models import (
     TestScore, TargetSchool, SchoolGrade,
     Payment, ParentContact,
     SalesAction, SalesGoal,
+    StaffNote, VideoLessonLog,
 )
 from app.database import Base
 from app.services.auth_service import hash_password
@@ -56,6 +57,19 @@ SCHOOLS = [
     "光陵高等学校", "翠嵐高等学校", "希望ヶ丘高等学校", "横浜翠陵高等学校", "湘南高等学校",
 ]
 
+SCHOOL_TYPES = ["公立", "私立", "国立"]
+SCHOOL_TYPE_WEIGHTS = [0.65, 0.30, 0.05]  # 公立65%・私立30%・国立5%
+
+# 部門 × コース種別の定義
+DIVISION_COURSE_TYPES = {
+    "集団": ["低学年", "中学受験（国私立）", "中学受験（公立中高一貫）", "高校受験", "大学受験"],
+    "個別": ["中学受験", "高校受験", "大学受験"],
+    "自立": ["映像", "速読", "Lepton英語", "学研教室"],
+}
+
+VIDEO_LESSON_CATEGORIES = ["国語", "数学", "英語", "理科", "社会", "総合"]
+NOTE_TYPES = ["電話報告", "保護者面談", "生徒ミーティング", "その他"]
+
 CONTACT_TYPES = ["電話報告", "面談", "保護者会", "テキスト報告", "メール"]
 ACTION_TYPES = ["trial_invitation", "phone_follow", "dm_campaign", "visit"]
 ACTION_TYPE_LABELS = {
@@ -69,6 +83,8 @@ ACTION_TYPE_LABELS = {
 def clear_all_tables(db: Session):
     """全テーブルのデータを削除 (FK制約を考慮した逆順)"""
     print("全テーブルをクリア中...")
+    db.query(VideoLessonLog).delete()
+    db.query(StaffNote).delete()
     db.query(SalesGoal).delete()
     db.query(SalesAction).delete()
     db.query(ParentContact).delete()
@@ -173,16 +189,30 @@ def seed_users(db: Session, classroom: Classroom) -> dict:
 
 
 def seed_courses(db: Session) -> list:
-    """講座を4つ作成"""
+    """講座を部門×種別で作成"""
     course_data = [
-        ("中学英語", "英語", "中学生向け英語コース"),
-        ("中学数学", "数学", "中学生向け数学コース"),
-        ("高校英語", "英語", "高校生向け英語コース"),
-        ("高校数学", "数学", "高校生向け数学コース"),
+        # 集団部門
+        ("集団-高校受験コース",   "総合",   "集団", "高校受験"),
+        ("集団-大学受験コース",   "総合",   "集団", "大学受験"),
+        ("集団-中学受験（国私立）コース", "総合", "集団", "中学受験（国私立）"),
+        ("集団-中学受験（公立中高一貫）コース", "総合", "集団", "中学受験（公立中高一貫）"),
+        ("集団-低学年コース",     "総合",   "集団", "低学年"),
+        # 個別部門
+        ("個別-高校受験コース",   "総合",   "個別", "高校受験"),
+        ("個別-大学受験コース",   "総合",   "個別", "大学受験"),
+        ("個別-中学受験コース",   "総合",   "個別", "中学受験"),
+        # 自立部門
+        ("自立-映像授業",         "総合",   "自立", "映像"),
+        ("自立-速読",             "国語",   "自立", "速読"),
+        ("自立-Lepton英語",       "英語",   "自立", "Lepton英語"),
+        ("自立-学研教室",         "総合",   "自立", "学研教室"),
     ]
     courses = []
-    for name, subject, desc in course_data:
-        c = Course(name=name, subject=subject, description=desc)
+    for name, subject, division, course_type in course_data:
+        c = Course(
+            name=name, subject=subject,
+            division=division, course_type=course_type,
+        )
         db.add(c)
         db.flush()
         courses.append(c)
@@ -260,13 +290,15 @@ def seed_students(db: Session, classroom: Classroom, users: dict, courses: list)
         # 担当講師をランダムに割り当て
         teacher = random.choice(teachers)
 
-        # 学校名
+        # 学校名・学校区分
         school = random.choice(SCHOOLS)
+        school_type = random.choices(SCHOOL_TYPES, weights=SCHOOL_TYPE_WEIGHTS)[0]
 
         student = Student(
             name=fake.name(),
             grade=grade,
             school=school,
+            school_type=school_type,
             status=status,
             enrolled_at=enrolled_at,
             trial_at=trial_at,
@@ -307,6 +339,14 @@ def seed_students(db: Session, classroom: Classroom, users: dict, courses: list)
 
         # 保護者コンタクト
         _seed_parent_contacts(db, student, teachers)
+
+        # スタッフ記録 (在籍・休会のみ)
+        if status in ["enrolled", "on_leave"]:
+            _seed_staff_notes(db, student, teachers)
+
+        # 映像授業ログ (自立部門受講生のみ)
+        if status == "enrolled":
+            _seed_video_logs(db, student)
 
         students.append({"student": student, "profile": profile})
 
@@ -365,23 +405,33 @@ def _seed_enrollment_events(db: Session, student: Student):
 
 
 def _seed_enrollments(db: Session, student: Student, courses: list):
-    """受講講座を設定"""
-    # 学年に応じた講座選択
-    if student.grade <= 9:
-        available = [c for c in courses if "中学" in c.name]
-    else:
-        available = [c for c in courses if "高校" in c.name]
+    """受講講座を部門ごとに設定（1〜2部門を受講）"""
+    # 学年に応じた利用可能コース
+    def course_for_grade(division: str) -> list:
+        pool = [c for c in courses if c.division == division]
+        if student.grade <= 6:
+            types = ["低学年"]
+        elif student.grade <= 9:
+            types = ["中学受験（国私立）", "中学受験（公立中高一貫）", "高校受験", "中学受験"]
+        else:
+            types = ["高校受験", "大学受験"]
+        filtered = [c for c in pool if c.course_type in types]
+        return filtered if filtered else pool
 
-    if not available:
-        available = courses[:2]
+    # ランダムに1〜2部門選択
+    all_divisions = ["集団", "個別", "自立"]
+    selected_divisions = random.sample(all_divisions, k=random.randint(1, 2))
 
-    # 1〜2講座受講
-    selected = random.sample(available, min(random.randint(1, 2), len(available)))
-    for course in selected:
+    started = student.enrolled_at or date.today() - timedelta(days=180)
+    for division in selected_divisions:
+        pool = course_for_grade(division)
+        if not pool:
+            continue
+        course = random.choice(pool)
         e = Enrollment(
             student_id=student.id,
             course_id=course.id,
-            started_at=student.enrolled_at or date.today() - timedelta(days=180),
+            started_at=started,
             ended_at=student.withdrawn_at,
             change_type="新規",
         )
@@ -610,6 +660,84 @@ def _seed_parent_contacts(db: Session, student: Student, teachers: list):
         db.add(contact)
 
 
+def _seed_staff_notes(db: Session, student: Student, teachers: list):
+    """スタッフ記録を2〜4件生成"""
+    today = date.today()
+    note_contents = {
+        "電話報告": [
+            "保護者より電話。学習状況について確認。特に問題なし。",
+            "保護者に成績向上を報告。次回模試への意欲も確認。",
+            "欠席理由を確認。体調不良とのこと。補講を提案。",
+        ],
+        "保護者面談": [
+            "志望校について保護者と面談。方針を共有した。",
+            "成績下降について対策を話し合い。週1回補習を実施することになった。",
+            "次学期の受講コースについて相談。追加受講を検討中。",
+        ],
+        "生徒ミーティング": [
+            "学習目標の確認。本人もやる気を見せている。",
+            "宿題の取り組み方について指導。改善の余地あり。",
+            "模試結果を一緒に確認。苦手分野の特定ができた。",
+        ],
+        "その他": [
+            "連絡帳にて学習状況を保護者に共有。",
+            "スケジュール調整の連絡を受けた。",
+        ],
+    }
+
+    count = random.randint(2, 4)
+    for _ in range(count):
+        note_type = random.choice(NOTE_TYPES)
+        days_ago = random.randint(5, 120)
+        occurred_at = datetime.combine(
+            today - timedelta(days=days_ago),
+            datetime.strptime(f"{random.randint(9,18)}:00", "%H:%M").time(),
+        )
+        note = StaffNote(
+            student_id=student.id,
+            teacher_id=random.choice(teachers).id,
+            note_type=note_type,
+            content=random.choice(note_contents[note_type]),
+            occurred_at=occurred_at,
+        )
+        db.add(note)
+
+
+def _seed_video_logs(db: Session, student: Student):
+    """過去3ヶ月の映像授業視聴ログを生成（自立部門受講生のみ）"""
+    # 自立部門受講かチェック
+    has_jiritu = any(
+        e.course and e.course.division == "自立"
+        for e in student.enrollments
+        if not e.ended_at
+    )
+    if not has_jiritu:
+        return
+
+    today = date.today()
+    # 月2〜8回視聴
+    view_count = random.randint(6, 24)
+    for _ in range(view_count):
+        days_ago = random.randint(1, 90)
+        viewed_at = datetime.combine(
+            today - timedelta(days=days_ago),
+            datetime.strptime(f"{random.randint(14,20)}:{random.choice(['00','15','30','45'])}", "%H:%M").time(),
+        )
+        duration = round(random.uniform(20, 90), 1)
+        completion = round(random.uniform(60, 100), 1)
+
+        vl = VideoLessonLog(
+            student_id=student.id,
+            lesson_name=f"{random.choice(VIDEO_LESSON_CATEGORIES)}_{random.randint(1,50):02d}講",
+            lesson_category=random.choice(VIDEO_LESSON_CATEGORIES),
+            viewed_at=viewed_at,
+            duration_minutes=duration,
+            completion_rate=completion,
+            source_system="映像授業システム",
+        )
+        db.add(vl)
+
+
 def seed_sales(db: Session, students_data: list, users: dict):
     """
     夏期講習の営業目標と営業アクションを生成:
@@ -713,7 +841,7 @@ def main():
 
         # 講座
         courses = seed_courses(db)
-        print(f"  講座作成: {len(courses)} 講座")
+        print(f"  講座作成: {len(courses)} 講座 (集団5・個別3・自立4)")
 
         # 生徒 + 関連データ
         print("  生徒データ生成中 (80名)...")

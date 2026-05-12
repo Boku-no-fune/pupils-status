@@ -6,6 +6,7 @@ import type {
   SalesProgress,
   RiskStudent,
   StudentListResponse,
+  LearningProgress,
 } from '@/types'
 
 export const dashboardApi = {
@@ -45,6 +46,13 @@ export const dashboardApi = {
   salesProgress: async (period?: string): Promise<SalesProgress[]> => {
     const { data } = await apiClient.get('/api/dashboard/sales-progress', {
       params: period ? { period } : {},
+    })
+    return data
+  },
+
+  learningProgress: async (classroomId?: number): Promise<LearningProgress> => {
+    const { data } = await apiClient.get('/api/dashboard/learning-progress', {
+      params: classroomId ? { classroom_id: classroomId } : {},
     })
     return data
   },

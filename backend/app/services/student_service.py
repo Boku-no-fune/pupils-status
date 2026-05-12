@@ -87,6 +87,8 @@ def get_student_list(
     teacher_id: Optional[int] = None,
     classroom_id: Optional[int] = None,
     search: Optional[str] = None,
+    school_type: Optional[str] = None,
+    division: Optional[str] = None,
     page: int = 1,
     per_page: int = 20,
 ) -> dict:
@@ -94,6 +96,9 @@ def get_student_list(
     生徒一覧を取得 (ダッシュボードTab1用)
     last_visit, attendance_rate, grade_change を付加する
     """
+    from app.models.enrollment import Enrollment
+    from app.models.course import Course
+
     query = db.query(Student)
 
     if status:
@@ -106,6 +111,14 @@ def get_student_list(
         query = query.filter(Student.classroom_id == classroom_id)
     if search:
         query = query.filter(Student.name.ilike(f"%{search}%"))
+    if school_type:
+        query = query.filter(Student.school_type == school_type)
+    if division:
+        subq = db.query(Enrollment.student_id).join(Course).filter(
+            Course.division == division,
+            Enrollment.ended_at.is_(None),
+        ).subquery()
+        query = query.filter(Student.id.in_(subq))
 
     total = query.count()
     students = query.order_by(Student.name).offset((page - 1) * per_page).limit(per_page).all()
@@ -122,6 +135,7 @@ def get_student_list(
             "name": s.name,
             "grade": s.grade,
             "school": s.school,
+            "school_type": s.school_type,
             "status": s.status,
             "enrolled_at": s.enrolled_at,
             "withdrawn_at": s.withdrawn_at,
@@ -185,11 +199,40 @@ def get_student_detail(student_id: int, db: Session) -> Optional[dict]:
             "assigned_teacher_name": teacher_n,
         })
 
+    # スタッフ記録
+    staff_notes = []
+    for sn in student.staff_notes:
+        teacher_n = sn.teacher.name if sn.teacher else None
+        staff_notes.append({
+            "id": sn.id,
+            "note_type": sn.note_type,
+            "content": sn.content,
+            "occurred_at": sn.occurred_at,
+            "teacher_id": sn.teacher_id,
+            "teacher_name": teacher_n,
+        })
+
+    # 映像授業ログ (直近50件)
+    video_logs = [
+        {
+            "id": vl.id,
+            "lesson_name": vl.lesson_name,
+            "lesson_category": vl.lesson_category,
+            "viewed_at": vl.viewed_at,
+            "duration_minutes": vl.duration_minutes,
+            "completion_rate": vl.completion_rate,
+            "source_system": vl.source_system,
+        }
+        for vl in student.video_lesson_logs[:50]
+    ]
+
     return {
         "id": student.id,
         "name": student.name,
         "grade": student.grade,
         "school": student.school,
+        "school_type": student.school_type,
+        "photo_data": student.photo_data,
         "status": student.status,
         "enrolled_at": student.enrolled_at,
         "trial_at": student.trial_at,
@@ -247,4 +290,6 @@ def get_student_detail(student_id: int, db: Session) -> Optional[dict]:
         ],
         "sales_actions": sales,
         "risk_score": risk,
+        "staff_notes": staff_notes,
+        "video_lesson_logs": video_logs,
     }

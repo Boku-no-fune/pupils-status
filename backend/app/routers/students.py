@@ -27,6 +27,8 @@ def list_students(
     teacher_id: Optional[int] = Query(None),
     classroom_id: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
+    school_type: Optional[str] = Query(None),
+    division: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -54,6 +56,8 @@ def list_students(
         teacher_id=teacher_id,
         classroom_id=classroom_id,
         search=search,
+        school_type=school_type,
+        division=division,
         page=page,
         per_page=per_page,
     )
@@ -114,3 +118,162 @@ def update_student(
 
     db.commit()
     return {"message": "更新しました"}
+
+
+# ===== 写真 =====
+
+from pydantic import BaseModel as PydanticBase
+
+class PhotoPayload(PydanticBase):
+    photo_data: Optional[str] = None  # base64文字列
+
+
+@router.put("/{student_id}/photo")
+def upload_photo(
+    student_id: int,
+    payload: PhotoPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "room_manager", "teacher")),
+):
+    """顔写真をBase64で保存"""
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="生徒が見つかりません")
+    student.photo_data = payload.photo_data
+    db.commit()
+    return {"message": "写真を保存しました"}
+
+
+# ===== スタッフ記録 =====
+
+from datetime import datetime
+from app.models.staff_note import StaffNote
+
+class StaffNoteCreate(PydanticBase):
+    note_type: str
+    content: str
+    occurred_at: datetime
+
+
+@router.get("/{student_id}/staff-notes")
+def list_staff_notes(
+    student_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """スタッフ記録一覧"""
+    notes = db.query(StaffNote).filter(
+        StaffNote.student_id == student_id
+    ).order_by(StaffNote.occurred_at.desc()).all()
+    return [
+        {
+            "id": n.id,
+            "note_type": n.note_type,
+            "content": n.content,
+            "occurred_at": n.occurred_at,
+            "teacher_id": n.teacher_id,
+            "teacher_name": n.teacher.name if n.teacher else None,
+        }
+        for n in notes
+    ]
+
+
+@router.post("/{student_id}/staff-notes", status_code=201)
+def create_staff_note(
+    student_id: int,
+    data: StaffNoteCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "room_manager", "teacher")),
+):
+    """スタッフ記録を追加"""
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="生徒が見つかりません")
+
+    note = StaffNote(
+        student_id=student_id,
+        teacher_id=current_user.id,
+        note_type=data.note_type,
+        content=data.content,
+        occurred_at=data.occurred_at,
+    )
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+    return {"id": note.id, "message": "記録しました"}
+
+
+@router.delete("/{student_id}/staff-notes/{note_id}")
+def delete_staff_note(
+    student_id: int,
+    note_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "room_manager", "teacher")),
+):
+    """スタッフ記録を削除"""
+    note = db.query(StaffNote).filter(
+        StaffNote.id == note_id,
+        StaffNote.student_id == student_id,
+    ).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="記録が見つかりません")
+    db.delete(note)
+    db.commit()
+    return {"message": "削除しました"}
+
+
+# ===== 映像授業ログ =====
+
+from app.models.video_lesson_log import VideoLessonLog
+import csv
+import io
+
+class VideoLogCreate(PydanticBase):
+    lesson_name: str
+    lesson_category: Optional[str] = None
+    viewed_at: datetime
+    duration_minutes: float
+    completion_rate: Optional[float] = None
+    source_system: Optional[str] = None
+
+
+@router.get("/{student_id}/video-logs")
+def list_video_logs(
+    student_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """映像授業視聴ログ一覧"""
+    logs = db.query(VideoLessonLog).filter(
+        VideoLessonLog.student_id == student_id
+    ).order_by(VideoLessonLog.viewed_at.desc()).limit(200).all()
+    return [
+        {
+            "id": lg.id,
+            "lesson_name": lg.lesson_name,
+            "lesson_category": lg.lesson_category,
+            "viewed_at": lg.viewed_at,
+            "duration_minutes": lg.duration_minutes,
+            "completion_rate": lg.completion_rate,
+            "source_system": lg.source_system,
+        }
+        for lg in logs
+    ]
+
+
+@router.post("/{student_id}/video-logs", status_code=201)
+def create_video_log(
+    student_id: int,
+    data: VideoLogCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "room_manager")),
+):
+    """映像授業ログを1件追加"""
+    student = db.query(Student).filter(Student.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="生徒が見つかりません")
+
+    log = VideoLessonLog(student_id=student_id, **data.model_dump())
+    db.add(log)
+    db.commit()
+    return {"message": "追加しました"}

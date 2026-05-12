@@ -17,6 +17,7 @@ from app.services.dashboard_service import (
 )
 from app.services.student_service import get_student_list
 from app.services.risk_service import get_all_risk_students
+from app.services.learning_service import get_learning_progress
 from app.dependencies.auth import get_current_user, require_roles
 
 router = APIRouter(prefix="/dashboard", tags=["ダッシュボード"])
@@ -41,6 +42,8 @@ def student_list_tab(
     teacher_id: Optional[int] = Query(None),
     classroom_id: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
+    school_type: Optional[str] = Query(None),
+    division: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -59,9 +62,23 @@ def student_list_tab(
         teacher_id=teacher_id,
         classroom_id=classroom_id,
         search=search,
+        school_type=school_type,
+        division=division,
         page=page,
         per_page=per_page,
     )
+
+
+@router.get("/learning-progress")
+def learning_progress_tab(
+    classroom_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "room_manager")),
+):
+    """Tab5: 学習進捗 (映像視聴ログ・宿題提出率)"""
+    if current_user.role == "room_manager" and not classroom_id:
+        classroom_id = current_user.classroom_id
+    return get_learning_progress(db, classroom_id)
 
 
 @router.get("/attendance-trend")

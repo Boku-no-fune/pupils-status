@@ -3,7 +3,7 @@
 ステータス: enrolled(在籍) / trial(体験) / on_leave(休会) / withdrawn(退会)
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Date
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Date, Text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -18,6 +18,12 @@ class Student(Base):
     # 学年: 1=小1, 6=小6, 7=中1, 9=中3, 10=高1, 12=高3
     grade = Column(Integer, nullable=False)
     school = Column(String(200), nullable=True)
+
+    # 在籍学校区分: 公立 / 私立 / 国立
+    school_type = Column(String(10), nullable=True)
+
+    # 顔写真 (base64エンコード)
+    photo_data = Column(Text, nullable=True)
 
     # 在籍ステータス
     status = Column(String(20), nullable=False, default="enrolled")
@@ -55,3 +61,7 @@ class Student(Base):
                                    order_by="ParentContact.occurred_at.desc()")
     sales_actions = relationship("SalesAction", back_populates="student",
                                  order_by="SalesAction.actioned_at.desc()")
+    staff_notes = relationship("StaffNote", back_populates="student",
+                               order_by="StaffNote.occurred_at.desc()")
+    video_lesson_logs = relationship("VideoLessonLog", back_populates="student",
+                                     order_by="VideoLessonLog.viewed_at.desc()")

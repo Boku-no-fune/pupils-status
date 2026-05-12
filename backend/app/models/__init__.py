@@ -13,6 +13,8 @@ from app.models.test_score import TestScore, TargetSchool, SchoolGrade
 from app.models.payment import Payment
 from app.models.contact import ParentContact
 from app.models.sales import SalesAction, SalesGoal
+from app.models.staff_note import StaffNote
+from app.models.video_lesson_log import VideoLessonLog
 
 __all__ = [
     "Classroom",
@@ -31,4 +33,6 @@ __all__ = [
     "ParentContact",
     "SalesAction",
     "SalesGoal",
+    "StaffNote",
+    "VideoLessonLog",
 ]

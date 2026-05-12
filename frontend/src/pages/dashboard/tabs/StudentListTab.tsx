@@ -13,7 +13,7 @@ import { gradeLabel } from '@/components/ui/GradeLabel'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import type { StudentStatus } from '@/types'
 
-const STATUS_OPTIONS: { value: string; label: string }[] = [
+const STATUS_OPTIONS = [
   { value: '', label: 'すべて' },
   { value: 'enrolled', label: '在籍' },
   { value: 'trial', label: '体験' },
@@ -21,19 +21,37 @@ const STATUS_OPTIONS: { value: string; label: string }[] = [
   { value: 'withdrawn', label: '退会' },
 ]
 
+const SCHOOL_TYPE_OPTIONS = [
+  { value: '', label: '学校区分: すべて' },
+  { value: '公立', label: '公立' },
+  { value: '私立', label: '私立' },
+  { value: '国立', label: '国立' },
+]
+
+const DIVISION_OPTIONS = [
+  { value: '', label: '部門: すべて' },
+  { value: '集団', label: '集団' },
+  { value: '個別', label: '個別' },
+  { value: '自立', label: '自立' },
+]
+
 export default function StudentListTab() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
+  const [schoolTypeFilter, setSchoolTypeFilter] = useState('')
+  const [divisionFilter, setDivisionFilter] = useState('')
   const [page, setPage] = useState(1)
   const perPage = 20
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['student-list', search, statusFilter, page],
+    queryKey: ['student-list', search, statusFilter, schoolTypeFilter, divisionFilter, page],
     queryFn: () =>
       dashboardApi.studentList({
         search: search || undefined,
         status: statusFilter || undefined,
+        school_type: schoolTypeFilter || undefined,
+        division: divisionFilter || undefined,
         page,
         per_page: perPage,
       }),
@@ -68,6 +86,28 @@ export default function StudentListTab() {
           className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
           {STATUS_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+
+        {/* 学校区分フィルター */}
+        <select
+          value={schoolTypeFilter}
+          onChange={(e) => { setSchoolTypeFilter(e.target.value); setPage(1) }}
+          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          {SCHOOL_TYPE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+
+        {/* 部門フィルター */}
+        <select
+          value={divisionFilter}
+          onChange={(e) => { setDivisionFilter(e.target.value); setPage(1) }}
+          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          {DIVISION_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>

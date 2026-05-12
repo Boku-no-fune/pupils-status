@@ -34,6 +34,7 @@ export interface Student {
   name: string
   grade: number
   school?: string
+  school_type?: string   // 公立 / 私立 / 国立
   status: StudentStatus
   enrolled_at?: string
   trial_at?: string
@@ -135,7 +136,27 @@ export interface RiskScore {
   suggestions: string[]
 }
 
+export interface StaffNote {
+  id: number
+  note_type: string
+  content: string
+  occurred_at: string
+  teacher_id?: number
+  teacher_name?: string
+}
+
+export interface VideoLessonLog {
+  id: number
+  lesson_name: string
+  lesson_category?: string
+  viewed_at: string
+  duration_minutes: number
+  completion_rate?: number
+  source_system?: string
+}
+
 export interface StudentDetail extends Student {
+  photo_data?: string
   enrollment_events: EnrollmentEvent[]
   enrollments: Enrollment[]
   recent_attendances: Attendance[]
@@ -146,6 +167,8 @@ export interface StudentDetail extends Student {
   payments: Payment[]
   sales_actions: SalesAction[]
   risk_score?: RiskScore
+  staff_notes: StaffNote[]
+  video_lesson_logs: VideoLessonLog[]
 }
 
 // ===== ダッシュボード =====
@@ -204,4 +227,32 @@ export interface StudentListResponse {
   page: number
   per_page: number
   students: Student[]
+}
+
+// ===== 学習進捗 =====
+export interface VideoMonthlyPoint {
+  month: string
+  total_minutes: number
+  view_count: number
+}
+
+export interface VideoCategoryPoint {
+  category: string
+  total_minutes: number
+  view_count: number
+}
+
+export interface HomeworkSummaryItem {
+  student_id: number
+  student_name: string
+  grade: number
+  total: number
+  submitted: number
+  submission_rate: number
+}
+
+export interface LearningProgress {
+  video_monthly: VideoMonthlyPoint[]
+  video_by_category: VideoCategoryPoint[]
+  homework_summary: HomeworkSummaryItem[]
 }
