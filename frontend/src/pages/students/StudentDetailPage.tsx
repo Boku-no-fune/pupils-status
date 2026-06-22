@@ -1,21 +1,31 @@
 /**
  * 生徒詳細ページ
- * 8セクション構成: 基本情報 / タイムライン / 成績 / 出欠カレンダー /
- *                  保護者コンタクト / 支払い / 営業 / リスク・AI
+ * 上段: 基本情報 + 特記事項
+ * 左カラム: タイムライン / 試験成績(折れ線・種別切替・手入力) / 出欠カレンダー / 映像視聴履歴
+ * 右カラム: リスク / スタッフ記録 / プロフィール / 要望クレーム / 英検漢検 / 紹介 / コンタクト / 支払 / 営業
  */
 
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Calendar, TrendingUp, Phone, CreditCard, Target, AlertTriangle, MessageSquare } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import {
+  ArrowLeft, Calendar, TrendingUp, Phone, CreditCard, Target, AlertTriangle,
+  MessageSquare, Award, Share2, Video, ClipboardList, BookUser,
+} from 'lucide-react'
 import { studentsApi } from '@/api/students'
 import { gradeLabel } from '@/components/ui/GradeLabel'
 import { StudentStatusBadge, SalesStatusBadge, RiskBadge } from '@/components/ui/Badge'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import AttendanceCalendar from '@/components/charts/AttendanceCalendar'
-import ScoreBarChart from '@/components/charts/ScoreBarChart'
 import ScoreRadarChart from '@/components/charts/ScoreRadarChart'
 import PhotoUpload from '@/components/ui/PhotoUpload'
 import StaffNoteSection from '@/components/ui/StaffNoteSection'
+import SpecialNotesSection from '@/components/students/SpecialNotesSection'
+import TestScoreSection from '@/components/students/TestScoreSection'
+import {
+  PhoneListSection, TeacherAssignSection, ProfileMemoSection,
+  ParentRequestSection, ExamCertSection, ReferralSection, VideoHistorySection,
+} from '@/components/students/StudentDetailSections'
 import type { StudentStatus, RiskLevel } from '@/types'
 
 export default function StudentDetailPage() {
@@ -30,37 +40,15 @@ export default function StudentDetailPage() {
   })
 
   if (isLoading) return (
-    <div className="p-6">
-      <LoadingSpinner text="生徒データを読み込み中..." />
-    </div>
+    <div className="p-6"><LoadingSpinner text="生徒データを読み込み中..." /></div>
   )
 
   if (isError || !student) return (
-    <div className="p-6 text-center text-red-500">
-      生徒データの取得に失敗しました
-    </div>
+    <div className="p-6 text-center text-red-500">生徒データの取得に失敗しました</div>
   )
-
-  // ScoreBarChart用にデータを変換
-  const scoreTrendData = (() => {
-    const sessions: Record<string, { test_id: string; test_name: string; test_date?: string; scores: Record<string, number> }> = {}
-    student.test_scores.forEach((ts) => {
-      if (!sessions[ts.test_id]) {
-        sessions[ts.test_id] = {
-          test_id: ts.test_id,
-          test_name: ts.test_name || ts.test_id,
-          test_date: ts.test_date,
-          scores: {},
-        }
-      }
-      sessions[ts.test_id].scores[ts.subject] = ts.raw_score
-    })
-    return Object.values(sessions).sort((a, b) => a.test_id.localeCompare(b.test_id))
-  })()
 
   return (
     <div className="p-6 max-w-screen-xl mx-auto space-y-6">
-      {/* 戻るボタン */}
       <button
         onClick={() => navigate(-1)}
         className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 transition-colors"
@@ -75,11 +63,19 @@ export default function StudentDetailPage() {
           <div className="flex items-center gap-4">
             <PhotoUpload studentId={student.id} photoData={student.photo_data} />
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{student.name}</h1>
-              <div className="flex items-center gap-3 mt-1 text-sm text-gray-500">
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-gray-900">{student.name}</h1>
+                {student.class_group && (
+                  <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-200">
+                    {student.class_group.name}（{student.class_group.level}）
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3 mt-1 text-sm text-gray-500 flex-wrap">
                 <span>{gradeLabel(student.grade)}</span>
-                {student.school && <span>• {student.school}</span>}
-                {student.assigned_teacher_name && <span>• 担当: {student.assigned_teacher_name}</span>}
+                {student.gender && <span>• {student.gender}</span>}
+                {student.school && <span>• {student.school}{student.school_type ? `（${student.school_type}）` : ''}</span>}
+                {student.member_number && <span className="font-mono text-xs">• 会員番号 {student.member_number}</span>}
               </div>
             </div>
           </div>
@@ -88,13 +84,26 @@ export default function StudentDetailPage() {
 
         {/* 基本情報グリッド */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-gray-100">
+          <InfoItem label="保護者氏名" value={student.parent_name || '—'} />
           <InfoItem label="入会日" value={student.enrolled_at || '—'} />
-          <InfoItem label="体験日" value={student.trial_at || '—'} />
           <InfoItem label="最終来室" value={student.last_visit || '—'} />
           <InfoItem
             label="出席率 (30日)"
             value={student.attendance_rate_30d !== undefined ? `${student.attendance_rate_30d.toFixed(0)}%` : '—'}
           />
+          <InfoItem label="兄弟姉妹" value={student.sibling_info || '—'} />
+        </div>
+
+        {/* 電話番号 + 担当講師 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-100">
+          <div>
+            <p className="text-xs text-gray-400 mb-2">電話番号</p>
+            <PhoneListSection studentId={student.id} phones={student.phones} />
+          </div>
+          <div>
+            <p className="text-xs text-gray-400 mb-2">担当講師</p>
+            <TeacherAssignSection studentId={student.id} teachers={student.teachers || []} />
+          </div>
         </div>
 
         {/* 受講講座 */}
@@ -128,11 +137,13 @@ export default function StudentDetailPage() {
         )}
       </div>
 
-      {/* 2カラムレイアウト: 左 (成績・出欠) | 右 (コンタクト・支払い・営業) */}
+      {/* 特記事項 (最上段コンテナ直下) */}
+      <SpecialNotesSection studentId={student.id} notes={student.special_notes} />
+
+      {/* 2カラムレイアウト */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 左カラム (2/3) */}
+        {/* 左カラム */}
         <div className="lg:col-span-2 space-y-6">
-          {/* タイムライン */}
           <Section icon={Calendar} title="イベントタイムライン">
             {student.enrollment_events.length === 0 ? (
               <EmptyState text="イベント記録がありません" />
@@ -156,14 +167,13 @@ export default function StudentDetailPage() {
             )}
           </Section>
 
-          {/* 成績グラフ */}
-          <Section icon={TrendingUp} title="テスト成績推移">
-            {scoreTrendData.length === 0 ? (
+          <Section icon={TrendingUp} title="試験成績">
+            {student.test_scores.length === 0 ? (
               <EmptyState text="テストデータがありません" />
             ) : (
               <div className="space-y-6">
-                <ScoreBarChart data={scoreTrendData} />
-                <div>
+                <TestScoreSection studentId={student.id} scores={student.test_scores} />
+                <div className="pt-2 border-t border-gray-100">
                   <p className="text-sm font-medium text-gray-600 mb-3">最新テスト 科目バランス</p>
                   <ScoreRadarChart scores={student.test_scores} />
                 </div>
@@ -171,7 +181,6 @@ export default function StudentDetailPage() {
             )}
           </Section>
 
-          {/* 出欠カレンダー */}
           <Section icon={Calendar} title="出欠カレンダー (直近3ヶ月)">
             {student.recent_attendances.length === 0 ? (
               <EmptyState text="出欠データがありません" />
@@ -179,11 +188,14 @@ export default function StudentDetailPage() {
               <AttendanceCalendar attendances={student.recent_attendances} months={3} />
             )}
           </Section>
+
+          <Section icon={Video} title="映像授業 視聴履歴">
+            <VideoHistorySection logs={student.video_lesson_logs} />
+          </Section>
         </div>
 
-        {/* 右カラム (1/3) */}
+        {/* 右カラム */}
         <div className="space-y-6">
-          {/* リスクスコア */}
           {student.risk_score && (
             <Section icon={AlertTriangle} title="リスク・AI提案">
               <div className="space-y-3">
@@ -220,12 +232,26 @@ export default function StudentDetailPage() {
             </Section>
           )}
 
-          {/* スタッフ記録 */}
           <Section icon={MessageSquare} title="スタッフ記録">
             <StaffNoteSection studentId={student.id} notes={student.staff_notes || []} />
           </Section>
 
-          {/* 保護者コンタクト */}
+          <Section icon={BookUser} title="プロフィールメモ">
+            <ProfileMemoSection studentId={student.id} memos={student.profile_memos} />
+          </Section>
+
+          <Section icon={ClipboardList} title="保護者 要望・クレーム">
+            <ParentRequestSection studentId={student.id} requests={student.parent_requests} />
+          </Section>
+
+          <Section icon={Award} title="英検・漢検">
+            <ExamCertSection studentId={student.id} certs={student.exam_certifications} />
+          </Section>
+
+          <Section icon={Share2} title="紹介・被紹介履歴">
+            <ReferralSection made={student.referrals_made} received={student.referrals_received} />
+          </Section>
+
           <Section icon={Phone} title="保護者コンタクト">
             {student.parent_contacts.length === 0 ? (
               <EmptyState text="コンタクト記録がありません" />
@@ -245,7 +271,6 @@ export default function StudentDetailPage() {
             )}
           </Section>
 
-          {/* 支払い */}
           <Section icon={CreditCard} title="支払い状況">
             {student.payments.length === 0 ? (
               <EmptyState text="支払いデータがありません" />
@@ -269,7 +294,6 @@ export default function StudentDetailPage() {
             )}
           </Section>
 
-          {/* 営業アクション */}
           <Section icon={Target} title="営業アクション">
             {student.sales_actions.length === 0 ? (
               <EmptyState text="アクション記録がありません" />
@@ -300,7 +324,7 @@ function Section({
   title,
   children,
 }: {
-  icon: React.ComponentType<{ size?: number; className?: string }>
+  icon: LucideIcon
   title: string
   children: React.ReactNode
 }) {
@@ -325,7 +349,5 @@ function InfoItem({ label, value }: { label: string; value: string }) {
 }
 
 function EmptyState({ text }: { text: string }) {
-  return (
-    <p className="text-sm text-gray-400 text-center py-4">{text}</p>
-  )
+  return <p className="text-sm text-gray-400 text-center py-4">{text}</p>
 }

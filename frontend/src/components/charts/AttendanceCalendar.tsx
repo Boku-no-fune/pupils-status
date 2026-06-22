@@ -23,9 +23,9 @@ const WEEKDAY_LABELS = ['月', '火', '水', '木', '金', '土', '日']
 
 export default function AttendanceCalendar({ attendances, months = 3 }: Props) {
   const attendanceMap = useMemo(() => {
-    const map: Record<string, string> = {}
+    const map: Record<string, Attendance> = {}
     attendances.forEach((a) => {
-      map[a.class_date] = a.status
+      map[a.class_date] = a
     })
     return map
   }, [attendances])
@@ -49,6 +49,7 @@ export default function AttendanceCalendar({ attendances, months = 3 }: Props) {
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-400 inline-block" />欠席</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-yellow-400 inline-block" />遅刻</span>
         <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-orange-400 inline-block" />早退</span>
+        <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-400 inline-flex items-center justify-center"><span className="w-1 h-1 rounded-full bg-white" /></span>欠席(振替/映像)</span>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -72,7 +73,7 @@ function MonthCalendar({
 }: {
   year: number
   month: number
-  attendanceMap: Record<string, string>
+  attendanceMap: Record<string, Attendance>
 }) {
   // 月の全日程を生成
   const daysInMonth = new Date(year, month, 0).getDate()
@@ -101,22 +102,31 @@ function MonthCalendar({
             return <div key={`empty-${idx}`} />
           }
           const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-          const status = attendanceMap[dateStr]
+          const att = attendanceMap[dateStr]
+          const status = att?.status
+          const hasMakeup = status === 'absent' && !!att?.makeup_type
           const isToday =
             dateStr === new Date().toISOString().split('T')[0]
+
+          const title = att
+            ? `${dateStr}: ${statusLabel(status as string)}${hasMakeup ? `（${att.makeup_type}${att.makeup_note ? ': ' + att.makeup_note : ''}）` : ''}`
+            : dateStr
 
           return (
             <div
               key={dateStr}
-              title={status ? `${dateStr}: ${statusLabel(status)}` : dateStr}
+              title={title}
               className={clsx(
-                'aspect-square rounded-sm flex items-center justify-center text-xs',
+                'relative aspect-square rounded-sm flex items-center justify-center text-xs',
                 status ? STATUS_COLORS[status] : 'bg-gray-100',
                 status ? 'text-white' : 'text-gray-400',
                 isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''
               )}
             >
               {day}
+              {hasMakeup && (
+                <span className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-white" />
+              )}
             </div>
           )
         })}
