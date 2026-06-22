@@ -1,5 +1,5 @@
 import apiClient from './client'
-import type { StudentListResponse, StudentDetail, StaffNote, VideoLessonLog, TeacherBrief } from '@/types'
+import type { StudentListResponse, StudentDetail, StaffNote, VideoLessonLog, TeacherBrief, ActivityRecord } from '@/types'
 
 export interface StudentListParams {
   status?: string
@@ -65,6 +65,12 @@ export const studentsApi = {
   // 映像授業ログ
   listVideoLogs: async (id: number): Promise<VideoLessonLog[]> => {
     const { data } = await apiClient.get(`/api/students/${id}/video-logs`)
+    return data
+  },
+
+  // 月別実施状況のポップアップ明細
+  listActivities: async (id: number, month: string): Promise<ActivityRecord[]> => {
+    const { data } = await apiClient.get(`/api/students/${id}/activities`, { params: { month } })
     return data
   },
 

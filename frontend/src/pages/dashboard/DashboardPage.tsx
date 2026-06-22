@@ -5,7 +5,7 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Users, TrendingUp, Target, AlertTriangle, BookOpen } from 'lucide-react'
+import { Users, TrendingUp, Target, AlertTriangle, BookOpen, CalendarCheck, UserPlus, MapPin } from 'lucide-react'
 import clsx from 'clsx'
 import { dashboardApi } from '@/api/dashboard'
 import StatCard from '@/components/ui/StatCard'
@@ -16,6 +16,9 @@ import AttendanceScoreTab from './tabs/AttendanceScoreTab'
 import SalesTab from './tabs/SalesTab'
 import RiskTab from './tabs/RiskTab'
 import LearningProgressTab from './tabs/LearningProgressTab'
+import ActivityMatrixTab from './tabs/ActivityMatrixTab'
+import ProspectTab from './tabs/ProspectTab'
+import MapTab from './tabs/MapTab'
 
 type StatKind = 'on_leave' | 'high_risk' | 'low_attendance'
 const STAT_TITLES: Record<StatKind, string> = {
@@ -30,6 +33,9 @@ const TABS = [
   { id: 'sales', label: '営業目標・アプローチ', icon: Target },
   { id: 'risk', label: 'リスク・AI提案', icon: AlertTriangle },
   { id: 'learning', label: '学習進捗', icon: BookOpen },
+  { id: 'activity', label: '月別実施状況', icon: CalendarCheck },
+  { id: 'prospects', label: '未入会生徒状況', icon: UserPlus },
+  { id: 'map', label: '通塾元・通学校マップ', icon: MapPin },
 ]
 
 export default function DashboardPage() {
@@ -126,6 +132,9 @@ export default function DashboardPage() {
           {activeTab === 'sales' && <SalesTab />}
           {activeTab === 'risk' && <RiskTab />}
           {activeTab === 'learning' && <LearningProgressTab />}
+          {activeTab === 'activity' && <ActivityMatrixTab />}
+          {activeTab === 'prospects' && <ProspectTab />}
+          {activeTab === 'map' && <MapTab />}
         </div>
       </div>
 

@@ -337,6 +337,89 @@ export interface StatStudent {
   assigned_teacher_name?: string
 }
 
+// ===== 月別実施状況 =====
+export interface ActivityCell {
+  month: string
+  staff: number
+  contact: number
+  total: number
+}
+export interface ActivityRow {
+  student_id: number
+  student_name: string
+  grade: number
+  class_label?: string
+  cells: ActivityCell[]
+  total: number
+}
+export interface ActivityMatrix {
+  months: string[]
+  rows: ActivityRow[]
+}
+export interface ActivityRecord {
+  kind: string       // スタッフ記録 / 保護者アプローチ
+  type: string
+  content?: string
+  occurred_at: string
+  teacher_name?: string
+}
+
+// ===== 未入会(見込み)生徒 =====
+export interface ProspectStage {
+  stage: string
+  id?: number
+  status: '未対応' | '対応中' | '完了'
+  memo?: string
+  occurred_at?: string
+}
+export interface Prospect {
+  id: number
+  name: string
+  grade?: number
+  school?: string
+  source?: string
+  status: string
+  assigned_teacher_name?: string
+  first_contact_at?: string
+  stages: ProspectStage[]
+}
+export interface ProspectFunnelStage {
+  stage: string
+  未対応: number
+  対応中: number
+  完了: number
+  total: number
+}
+export interface ProspectFunnel {
+  total_prospects: number
+  stages: ProspectFunnelStage[]
+}
+
+// ===== 地図 =====
+export interface MapStudent {
+  id: number
+  name: string
+  grade: number
+  school?: string
+  address?: string
+  home_lat: number
+  home_lng: number
+  school_lat?: number
+  school_lng?: number
+  class_label?: string
+}
+export interface MapSchool {
+  name: string
+  lat: number
+  lng: number
+  count: number
+}
+export interface MapData {
+  classroom: { name: string; lat: number; lng: number }
+  students: MapStudent[]
+  schools: MapSchool[]
+}
+
 // ===== 学習進捗 =====
 export interface VideoMonthlyPoint {
   month: string

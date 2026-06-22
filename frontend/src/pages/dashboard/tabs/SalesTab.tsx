@@ -8,6 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { FileText, RefreshCw } from 'lucide-react'
 import { dashboardApi } from '@/api/dashboard'
 import { salesApi } from '@/api/sales'
+import { prospectsApi } from '@/api/prospects'
 import GoalProgressBar from '@/components/ui/GoalProgressBar'
 import { SalesStatusBadge } from '@/components/ui/Badge'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -39,6 +40,11 @@ export default function SalesTab() {
     queryKey: ['sales-report'],
     queryFn: () => salesApi.getReport(),
     enabled: showReport,
+  })
+
+  const { data: funnel } = useQuery({
+    queryKey: ['prospect-funnel'],
+    queryFn: () => prospectsApi.funnel(),
   })
 
   const updateAction = useMutation({
@@ -110,6 +116,23 @@ export default function SalesTab() {
           <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans bg-gray-50 rounded-lg p-4">
             {report.report_text}
           </pre>
+        </div>
+      )}
+
+      {/* 未入会ファネル連携 */}
+      {funnel && (
+        <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <h3 className="font-semibold text-gray-800 mb-1">未入会ファネル（{funnel.total_prospects}名）</h3>
+          <p className="text-xs text-gray-400 mb-3">「未入会生徒状況」タブと連携。各ステージの完了数を表示。</p>
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+            {funnel.stages.map((s) => (
+              <div key={s.stage} className="border border-gray-100 rounded-lg p-2 text-center">
+                <p className="text-[11px] text-gray-500 mb-0.5">{s.stage}</p>
+                <p className="text-lg font-bold text-gray-800">{s.完了}</p>
+                <p className="text-[10px] text-gray-400">対応中 {s.対応中}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

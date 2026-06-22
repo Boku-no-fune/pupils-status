@@ -10,6 +10,8 @@ import type {
   ClassInfo,
   StatStudent,
   TeacherBrief,
+  ActivityMatrix,
+  MapData,
 } from '@/types'
 
 export const dashboardApi = {
@@ -74,6 +76,16 @@ export const dashboardApi = {
     const { data } = await apiClient.get('/api/dashboard/learning-progress', {
       params: classroomId ? { classroom_id: classroomId } : {},
     })
+    return data
+  },
+
+  activityMatrix: async (months = 6): Promise<ActivityMatrix> => {
+    const { data } = await apiClient.get('/api/dashboard/activity-matrix', { params: { months } })
+    return data
+  },
+
+  mapData: async (): Promise<MapData> => {
+    const { data } = await apiClient.get('/api/dashboard/map-data')
     return data
   },
 }
