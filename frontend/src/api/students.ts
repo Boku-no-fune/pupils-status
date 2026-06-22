@@ -1,5 +1,5 @@
 import apiClient from './client'
-import type { StudentListResponse, StudentDetail, StaffNote, VideoLessonLog } from '@/types'
+import type { StudentListResponse, StudentDetail, StaffNote, VideoLessonLog, TeacherBrief } from '@/types'
 
 export interface StudentListParams {
   status?: string
@@ -9,6 +9,8 @@ export interface StudentListParams {
   search?: string
   school_type?: string
   division?: string
+  sort_by?: string
+  sort_dir?: string
   page?: number
   per_page?: number
 }
@@ -40,9 +42,15 @@ export const studentsApi = {
     return data
   },
 
+  listStaffNotesFiltered: async (id: number, params: { tag?: string; search?: string }): Promise<StaffNote[]> => {
+    const { data } = await apiClient.get(`/api/students/${id}/staff-notes`, { params })
+    return data
+  },
+
   createStaffNote: async (id: number, payload: {
     note_type: string
     content: string
+    tags?: string[]
     occurred_at: string
   }) => {
     const { data } = await apiClient.post(`/api/students/${id}/staff-notes`, payload)
@@ -57,6 +65,89 @@ export const studentsApi = {
   // 映像授業ログ
   listVideoLogs: async (id: number): Promise<VideoLessonLog[]> => {
     const { data } = await apiClient.get(`/api/students/${id}/video-logs`)
+    return data
+  },
+
+  // ===== 特記事項 =====
+  createSpecialNote: async (id: number, payload: { content: string; importance: string }) => {
+    const { data } = await apiClient.post(`/api/students/${id}/special-notes`, payload)
+    return data
+  },
+  deleteSpecialNote: async (id: number, noteId: number) => {
+    const { data } = await apiClient.delete(`/api/students/${id}/special-notes/${noteId}`)
+    return data
+  },
+
+  // ===== プロフィール定型メモ =====
+  createProfileMemo: async (id: number, payload: { category: string; content: string }) => {
+    const { data } = await apiClient.post(`/api/students/${id}/profile-memos`, payload)
+    return data
+  },
+  deleteProfileMemo: async (id: number, memoId: number) => {
+    const { data } = await apiClient.delete(`/api/students/${id}/profile-memos/${memoId}`)
+    return data
+  },
+
+  // ===== 保護者要望・クレーム =====
+  createParentRequest: async (id: number, payload: { request_type: string; content: string; status?: string }) => {
+    const { data } = await apiClient.post(`/api/students/${id}/parent-requests`, payload)
+    return data
+  },
+  updateParentRequest: async (id: number, reqId: number, status: string) => {
+    const { data } = await apiClient.patch(`/api/students/${id}/parent-requests/${reqId}`, { status })
+    return data
+  },
+  deleteParentRequest: async (id: number, reqId: number) => {
+    const { data } = await apiClient.delete(`/api/students/${id}/parent-requests/${reqId}`)
+    return data
+  },
+
+  // ===== 電話番号メモ =====
+  createPhone: async (id: number, payload: { phone_number: string; memo?: string }) => {
+    const { data } = await apiClient.post(`/api/students/${id}/phones`, payload)
+    return data
+  },
+  updatePhoneMemo: async (id: number, phoneId: number, memo: string) => {
+    const { data } = await apiClient.patch(`/api/students/${id}/phones/${phoneId}`, { memo })
+    return data
+  },
+  deletePhone: async (id: number, phoneId: number) => {
+    const { data } = await apiClient.delete(`/api/students/${id}/phones/${phoneId}`)
+    return data
+  },
+
+  // ===== 試験成績の手入力 =====
+  createTestScore: async (id: number, payload: {
+    test_id: string; test_name?: string; test_type?: string
+    subject: string; raw_score: number; rank?: number; deviation_value?: number; test_date?: string
+  }) => {
+    const { data } = await apiClient.post(`/api/students/${id}/test-scores`, payload)
+    return data
+  },
+  deleteTestScore: async (id: number, scoreId: number) => {
+    const { data } = await apiClient.delete(`/api/students/${id}/test-scores/${scoreId}`)
+    return data
+  },
+
+  // ===== 英検・漢検 =====
+  createExamCert: async (id: number, payload: {
+    exam_type: string; level: string; score?: number; result?: string; exam_date?: string
+  }) => {
+    const { data } = await apiClient.post(`/api/students/${id}/exam-certs`, payload)
+    return data
+  },
+  deleteExamCert: async (id: number, certId: number) => {
+    const { data } = await apiClient.delete(`/api/students/${id}/exam-certs/${certId}`)
+    return data
+  },
+
+  // ===== 担当講師の追加・削除 =====
+  addTeacher: async (id: number, userId: number): Promise<{ teachers: TeacherBrief[] }> => {
+    const { data } = await apiClient.post(`/api/students/${id}/teachers`, { user_id: userId })
+    return data
+  },
+  removeTeacher: async (id: number, userId: number): Promise<{ teachers: TeacherBrief[] }> => {
+    const { data } = await apiClient.delete(`/api/students/${id}/teachers/${userId}`)
     return data
   },
 }

@@ -1,12 +1,13 @@
 /**
  * Tab1: 生徒一覧・ステータス
- * フィルタ・ページネーション付きテーブル
+ * フィルタ・ソート・ページネーション付きテーブル
+ * 列: 会員番号 / 氏名 / 学年 / クラス / ステータス / 最終来室 / 出席率 / 直近成績 / 担当講師
  */
 
 import { useState } from 'react'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Search, ChevronUp, ChevronDown, Minus } from 'lucide-react'
+import { Search, ChevronUp, ChevronDown, Minus, ArrowUpDown } from 'lucide-react'
 import { dashboardApi } from '@/api/dashboard'
 import { StudentStatusBadge } from '@/components/ui/Badge'
 import { gradeLabel } from '@/components/ui/GradeLabel'
@@ -35,23 +36,51 @@ const DIVISION_OPTIONS = [
   { value: '自立', label: '自立' },
 ]
 
+type SortKey = 'member_number' | 'name' | 'grade' | 'class' | 'status' | 'last_visit' | 'attendance_rate_30d'
+
+const COLUMNS: { key: SortKey | null; label: string }[] = [
+  { key: 'member_number', label: '会員番号' },
+  { key: 'name', label: '氏名' },
+  { key: 'grade', label: '学年' },
+  { key: 'class', label: 'クラス' },
+  { key: 'status', label: 'ステータス' },
+  { key: 'last_visit', label: '最終来室' },
+  { key: 'attendance_rate_30d', label: '出席率(30日)' },
+  { key: null, label: '直近成績' },
+  { key: null, label: '担当講師' },
+]
+
 export default function StudentListTab() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [schoolTypeFilter, setSchoolTypeFilter] = useState('')
   const [divisionFilter, setDivisionFilter] = useState('')
+  const [sortBy, setSortBy] = useState<SortKey>('grade')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [page, setPage] = useState(1)
   const perPage = 20
 
+  const toggleSort = (key: SortKey) => {
+    if (sortBy === key) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(key)
+      setSortDir('asc')
+    }
+    setPage(1)
+  }
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['student-list', search, statusFilter, schoolTypeFilter, divisionFilter, page],
+    queryKey: ['student-list', search, statusFilter, schoolTypeFilter, divisionFilter, sortBy, sortDir, page],
     queryFn: () =>
       dashboardApi.studentList({
         search: search || undefined,
         status: statusFilter || undefined,
         school_type: schoolTypeFilter || undefined,
         division: divisionFilter || undefined,
+        sort_by: sortBy,
+        sort_dir: sortDir,
         page,
         per_page: perPage,
       }),
@@ -67,7 +96,6 @@ export default function StudentListTab() {
     <div className="space-y-4">
       {/* フィルターバー */}
       <div className="flex flex-wrap gap-3 items-center">
-        {/* 検索 */}
         <div className="relative flex-1 min-w-48">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
@@ -79,7 +107,6 @@ export default function StudentListTab() {
           />
         </div>
 
-        {/* ステータスフィルター */}
         <select
           value={statusFilter}
           onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
@@ -90,7 +117,6 @@ export default function StudentListTab() {
           ))}
         </select>
 
-        {/* 学校区分フィルター */}
         <select
           value={schoolTypeFilter}
           onChange={(e) => { setSchoolTypeFilter(e.target.value); setPage(1) }}
@@ -101,7 +127,6 @@ export default function StudentListTab() {
           ))}
         </select>
 
-        {/* 部門フィルター */}
         <select
           value={divisionFilter}
           onChange={(e) => { setDivisionFilter(e.target.value); setPage(1) }}
@@ -112,7 +137,6 @@ export default function StudentListTab() {
           ))}
         </select>
 
-        {/* 件数表示 */}
         <span className="text-sm text-gray-500 ml-auto">
           全 {data?.total ?? 0} 名
         </span>
@@ -123,13 +147,24 @@ export default function StudentListTab() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">氏名</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">学年</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">ステータス</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">最終来室</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">出席率(30日)</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">直近成績</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">担当講師</th>
+              {COLUMNS.map((col) => (
+                <th
+                  key={col.label}
+                  onClick={col.key ? () => toggleSort(col.key as SortKey) : undefined}
+                  className={`px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap ${
+                    col.key ? 'cursor-pointer select-none hover:text-gray-800' : ''
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    {col.label}
+                    {col.key && (
+                      sortBy === col.key
+                        ? (sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />)
+                        : <ArrowUpDown size={12} className="text-gray-300" />
+                    )}
+                  </span>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -139,8 +174,16 @@ export default function StudentListTab() {
                 onClick={() => navigate(`/students/${student.id}`)}
                 className="hover:bg-blue-50 cursor-pointer transition-colors"
               >
+                <td className="px-4 py-3 text-gray-500 font-mono text-xs">{student.member_number || '—'}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">{student.name}</td>
                 <td className="px-4 py-3 text-gray-600">{gradeLabel(student.grade)}</td>
+                <td className="px-4 py-3">
+                  {student.class_label ? (
+                    <span className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-full border border-indigo-100">
+                      {student.class_label}
+                    </span>
+                  ) : <span className="text-gray-400">—</span>}
+                </td>
                 <td className="px-4 py-3">
                   <StudentStatusBadge status={student.status as StudentStatus} />
                 </td>
@@ -172,7 +215,11 @@ export default function StudentListTab() {
                     </span>
                   ) : '—'}
                 </td>
-                <td className="px-4 py-3 text-gray-600">{student.assigned_teacher_name || '—'}</td>
+                <td className="px-4 py-3 text-gray-600">
+                  {student.teachers && student.teachers.length > 0
+                    ? student.teachers.map((t) => t.name).join('、')
+                    : (student.assigned_teacher_name || '—')}
+                </td>
               </tr>
             ))}
           </tbody>

@@ -29,9 +29,23 @@ export interface GradeChange {
   direction: 'up' | 'down' | 'stable'
 }
 
+export interface TeacherBrief {
+  id: number
+  name: string
+  role?: string
+}
+
+export interface ClassGroupBrief {
+  id: number
+  name: string
+  level: string
+  grade: number
+}
+
 export interface Student {
   id: number
   name: string
+  member_number?: string
   grade: number
   school?: string
   school_type?: string   // 公立 / 私立 / 国立
@@ -42,6 +56,10 @@ export interface Student {
   assigned_teacher_id?: number
   assigned_teacher_name?: string
   classroom_id?: number
+  // クラス・部門・複数担当
+  class_label?: string
+  divisions?: string[]
+  teachers?: TeacherBrief[]
   // ダッシュボード集計フィールド
   last_visit?: string
   attendance_rate_30d?: number
@@ -69,12 +87,15 @@ export interface Attendance {
   class_date: string
   status: 'present' | 'absent' | 'late' | 'early_leave'
   note?: string
+  makeup_type?: string   // 映像視聴 / 振替
+  makeup_note?: string
 }
 
 export interface TestScore {
   id: number
   test_id: string
   test_name?: string
+  test_type?: string   // 塾内試験A/B, 業者模試A/B, 学校定期テスト, その他
   subject: string
   raw_score: number
   rank?: number
@@ -140,9 +161,65 @@ export interface StaffNote {
   id: number
   note_type: string
   content: string
+  tags?: string[]
   occurred_at: string
   teacher_id?: number
   teacher_name?: string
+}
+
+// ===== 生徒詳細の追加情報 =====
+export interface StudentPhone {
+  id: number
+  phone_number: string
+  memo?: string
+  position: number
+}
+
+export interface SpecialNote {
+  id: number
+  content: string
+  importance: '高' | '中' | '低'
+  created_at?: string
+}
+
+export interface ProfileMemo {
+  id: number
+  category: string
+  content: string
+  created_at?: string
+}
+
+export interface ParentRequest {
+  id: number
+  request_type: '要望' | 'クレーム'
+  content: string
+  status: '対応中' | '対応済'
+  occurred_at: string
+}
+
+export interface ExamCertification {
+  id: number
+  exam_type: '英検' | '漢検'
+  level: string
+  score?: number
+  result: '合格' | '不合格' | '受験予定'
+  exam_date?: string
+}
+
+export interface ReferralMade {
+  id: number
+  referred_student_id?: number
+  referred_name?: string
+  occurred_at?: string
+  note?: string
+}
+
+export interface ReferralReceived {
+  id: number
+  referrer_student_id?: number
+  referrer_name?: string
+  occurred_at?: string
+  note?: string
 }
 
 export interface VideoLessonLog {
@@ -157,6 +234,11 @@ export interface VideoLessonLog {
 
 export interface StudentDetail extends Student {
   photo_data?: string
+  gender?: string
+  parent_name?: string
+  sibling_info?: string
+  class_group_id?: number
+  class_group?: ClassGroupBrief
   enrollment_events: EnrollmentEvent[]
   enrollments: Enrollment[]
   recent_attendances: Attendance[]
@@ -169,6 +251,13 @@ export interface StudentDetail extends Student {
   risk_score?: RiskScore
   staff_notes: StaffNote[]
   video_lesson_logs: VideoLessonLog[]
+  phones: StudentPhone[]
+  special_notes: SpecialNote[]
+  profile_memos: ProfileMemo[]
+  parent_requests: ParentRequest[]
+  exam_certifications: ExamCertification[]
+  referrals_made: ReferralMade[]
+  referrals_received: ReferralReceived[]
 }
 
 // ===== ダッシュボード =====
@@ -227,6 +316,25 @@ export interface StudentListResponse {
   page: number
   per_page: number
   students: Student[]
+}
+
+export interface ClassInfo {
+  id: number
+  name: string
+  grade: number
+  level: string
+  student_count: number
+  teachers: TeacherBrief[]
+}
+
+export interface StatStudent {
+  id: number
+  name: string
+  grade: number
+  status: StudentStatus
+  class_label?: string
+  attendance_rate_30d: number
+  assigned_teacher_name?: string
 }
 
 // ===== 学習進捗 =====

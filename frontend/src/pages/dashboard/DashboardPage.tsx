@@ -10,11 +10,19 @@ import clsx from 'clsx'
 import { dashboardApi } from '@/api/dashboard'
 import StatCard from '@/components/ui/StatCard'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import StatStudentsModal from '@/components/dashboard/StatStudentsModal'
 import StudentListTab from './tabs/StudentListTab'
 import AttendanceScoreTab from './tabs/AttendanceScoreTab'
 import SalesTab from './tabs/SalesTab'
 import RiskTab from './tabs/RiskTab'
 import LearningProgressTab from './tabs/LearningProgressTab'
+
+type StatKind = 'on_leave' | 'high_risk' | 'low_attendance'
+const STAT_TITLES: Record<StatKind, string> = {
+  on_leave: '休会中の生徒',
+  high_risk: '高リスク生徒（出席率60%未満）',
+  low_attendance: '出席率が低い生徒',
+}
 
 const TABS = [
   { id: 'students', label: '生徒一覧・ステータス', icon: Users },
@@ -26,6 +34,7 @@ const TABS = [
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('students')
+  const [statModal, setStatModal] = useState<StatKind | null>(null)
 
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ['dashboard-stats'],
@@ -66,6 +75,7 @@ export default function DashboardPage() {
             iconColor="text-green-600"
             bgColor="bg-green-50"
             description="直近30日間"
+            onClick={() => setStatModal('low_attendance')}
           />
           <StatCard
             title="休会中"
@@ -74,6 +84,7 @@ export default function DashboardPage() {
             icon={Users}
             iconColor="text-yellow-600"
             bgColor="bg-yellow-50"
+            onClick={() => setStatModal('on_leave')}
           />
           <StatCard
             title="高リスク生徒"
@@ -83,6 +94,7 @@ export default function DashboardPage() {
             iconColor="text-red-600"
             bgColor="bg-red-50"
             description="要フォロー"
+            onClick={() => setStatModal('high_risk')}
           />
         </div>
       )}
@@ -116,6 +128,15 @@ export default function DashboardPage() {
           {activeTab === 'learning' && <LearningProgressTab />}
         </div>
       </div>
+
+      {/* サマリーカードのドリルダウン */}
+      {statModal && (
+        <StatStudentsModal
+          kind={statModal}
+          title={STAT_TITLES[statModal]}
+          onClose={() => setStatModal(null)}
+        />
+      )}
     </div>
   )
 }
