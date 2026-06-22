@@ -168,6 +168,12 @@ MAKEUP_TYPES = ["映像視聴", "振替"]
 
 # 地図(東京都内ダミー座標)。教室は渋谷想定。
 CLASSROOM_LATLNG = (35.6618, 139.7041)  # 渋谷駅付近
+# 住所生成用の東京都内エリア名 (Fakerのバージョン差に依存しないよう固定リスト)
+TOKYO_AREAS = [
+    "渋谷区道玄坂", "渋谷区神南", "新宿区西新宿", "目黒区中目黒", "世田谷区三軒茶屋",
+    "港区南青山", "渋谷区恵比寿", "目黒区自由が丘", "世田谷区下北沢", "新宿区高田馬場",
+    "品川区大崎", "中野区中野", "杉並区荻窪", "豊島区池袋", "文京区本郷",
+]
 # 各学校に固定の東京都内座標を割当
 SCHOOL_COORDS = {
     "桜木中学校": (35.6699, 139.7100), "緑ヶ丘中学校": (35.6488, 139.7100), "東光中学校": (35.6780, 139.7180),
@@ -479,7 +485,7 @@ def seed_students(db: Session, classroom: Classroom, users: dict, courses: list,
                 "弟（小4・当塾在籍）", "姉（高2・他塾）", "一人っ子", "兄（大学生）", "妹（小2）",
             ]),
             member_number=_generate_member_number(idx),
-            address=f"東京都{fake.town()}{random.randint(1,5)}-{random.randint(1,20)}-{random.randint(1,30)}",
+            address=f"東京都{random.choice(TOKYO_AREAS)}{random.randint(1,5)}-{random.randint(1,20)}-{random.randint(1,30)}",
             home_lat=home_lat, home_lng=home_lng,
             school_lat=school_lat, school_lng=school_lng,
             status=status,
@@ -538,8 +544,8 @@ def seed_students(db: Session, classroom: Classroom, users: dict, courses: list,
         if status in ["enrolled", "on_leave"]:
             _seed_staff_notes(db, student, teachers)
 
-        # 映像授業ログ (自立部門受講生のみ)
-        if status == "enrolled":
+        # 映像授業ログ (在籍・休会の全生徒に付与。自立部門は多め)
+        if status in ["enrolled", "on_leave"]:
             _seed_video_logs(db, student)
 
         students.append({"student": student, "profile": profile})
@@ -1067,19 +1073,19 @@ def _seed_staff_notes(db: Session, student: Student, teachers: list):
 
 
 def _seed_video_logs(db: Session, student: Student):
-    """過去3ヶ月の映像授業視聴ログを生成（自立部門受講生のみ）"""
-    # 自立部門受講かチェック
+    """
+    過去3ヶ月の映像授業視聴ログを生成。
+    各画面が「データなし」にならないよう全在籍生に付与し、自立部門受講生は視聴回数を多めにする。
+    """
     has_jiritu = any(
         e.course and e.course.division == "自立"
         for e in student.enrollments
         if not e.ended_at
     )
-    if not has_jiritu:
-        return
 
     today = date.today()
-    # 月2〜8回視聴
-    view_count = random.randint(6, 24)
+    # 自立部門は12〜30回、それ以外も3〜12回は視聴している想定
+    view_count = random.randint(12, 30) if has_jiritu else random.randint(3, 12)
     for _ in range(view_count):
         days_ago = random.randint(1, 90)
         viewed_at = datetime.combine(
@@ -1203,7 +1209,7 @@ def seed_prospects(db: Session, users: dict):
             grade=grade,
             school=school,
             source=random.choice(PROSPECT_SOURCES),
-            address=f"東京都{fake.town()}{random.randint(1,5)}-{random.randint(1,20)}",
+            address=f"東京都{random.choice(TOKYO_AREAS)}{random.randint(1,5)}-{random.randint(1,20)}",
             home_lat=home_lat, home_lng=home_lng,
             status="active",
             assigned_to=random.choice(teachers).id,
