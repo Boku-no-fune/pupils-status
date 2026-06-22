@@ -23,6 +23,8 @@ from sqlalchemy.orm import Session
 from app.database import SessionLocal, engine
 from app.models import (
     Classroom, User, Course, Student,
+    ClassGroup, class_teachers, student_teachers,
+    StudentPhone, SpecialNote, ProfileMemo, ParentRequest, Referral, ExamCertification,
     EnrollmentEvent, Enrollment,
     Attendance, RoomLog,
     Homework,
@@ -70,6 +72,96 @@ DIVISION_COURSE_TYPES = {
 VIDEO_LESSON_CATEGORIES = ["国語", "数学", "英語", "理科", "社会", "総合"]
 NOTE_TYPES = ["電話報告", "保護者面談", "生徒ミーティング", "その他"]
 
+# クラス定義 (集団部門。中1〜中3。レベル G/R=標準, L/D=応用, T=難関)
+CLASS_DEFS = [
+    ("1G-1", 7, "標準", 1), ("1G-2", 7, "標準", 2), ("1L-1", 7, "応用", 3), ("1L-2", 7, "応用", 4), ("1T-1", 7, "難関", 5),
+    ("2G-1", 8, "標準", 11), ("2G-2", 8, "標準", 12), ("2L-1", 8, "応用", 13), ("2L-2", 8, "応用", 14), ("2T-1", 8, "難関", 15),
+    ("3R-1", 9, "標準", 21), ("3R-2", 9, "標準", 22), ("3D-1", 9, "応用", 23), ("3D-2", 9, "応用", 24), ("3T-1", 9, "難関", 25),
+]
+
+GENDERS = ["男", "女"]
+
+# 試験種別ごとのセッション定義 (test_id, test_name, 月日(year,month,day))
+INTERNAL_TEST_A = [  # 塾内試験A
+    ("juku-a-2024-10", "塾内試験A 第3回", (2024, 10, 5)),
+    ("juku-a-2024-12", "塾内試験A 第4回", (2024, 12, 7)),
+    ("juku-a-2025-02", "塾内試験A 第5回", (2025, 2, 8)),
+]
+INTERNAL_TEST_B = [  # 塾内試験B
+    ("juku-b-2024-10", "塾内試験B 第3回", (2024, 10, 19)),
+    ("juku-b-2024-12", "塾内試験B 第4回", (2024, 12, 21)),
+    ("juku-b-2025-02", "塾内試験B 第5回", (2025, 2, 22)),
+]
+VENDOR_TEST_A = [  # 業者模試A (旧 TEST_SESSIONS 相当)
+    ("gyosha-a-2024-09", "業者模試A 9月", (2024, 9, 15)),
+    ("gyosha-a-2024-11", "業者模試A 11月", (2024, 11, 17)),
+    ("gyosha-a-2025-01", "業者模試A 1月", (2025, 1, 19)),
+]
+VENDOR_TEST_B = [  # 業者模試B
+    ("gyosha-b-2024-10", "業者模試B 10月", (2024, 10, 13)),
+    ("gyosha-b-2025-01", "業者模試B 1月", (2025, 1, 26)),
+]
+
+# 学校定期テスト (2期制 / 3期制)
+TERM_TESTS_2 = [  # 2期制
+    ("teiki-2024-zenki-chukan", "前期中間", (2024, 5, 23)),
+    ("teiki-2024-zenki-kimatsu", "前期期末", (2024, 6, 27)),
+    ("teiki-2024-koki-chukan", "後期中間", (2024, 11, 21)),
+    ("teiki-2024-koki-kimatsu", "後期期末", (2025, 2, 20)),
+]
+TERM_TESTS_3 = [  # 3期制
+    ("teiki-2024-1-chukan", "1学期中間", (2024, 5, 23)),
+    ("teiki-2024-1-kimatsu", "1学期期末", (2024, 6, 27)),
+    ("teiki-2024-2-chukan", "2学期中間", (2024, 10, 10)),
+    ("teiki-2024-2-kimatsu", "2学期期末", (2024, 11, 28)),
+    ("teiki-2024-3-kimatsu", "3学期期末", (2025, 2, 27)),
+]
+
+# 英検・漢検の級
+EIKEN_LEVELS = ["5級", "4級", "3級", "準2級", "準2級プラス", "2級", "準1級", "1級"]
+KANKEN_LEVELS = ["10級", "9級", "8級", "7級", "6級", "5級", "4級", "3級", "準2級", "2級", "準1級", "1級"]
+
+# プロフィール定型メモのカテゴリ
+PROFILE_CATEGORIES = ["部活動", "習い事", "家族構成", "家族の職業・学年", "通学校情報"]
+PROFILE_SAMPLES = {
+    "部活動": ["サッカー部（火・木・土）", "吹奏楽部（月・水・金・土）", "バスケ部（平日毎日）", "美術部（週2回）", "帰宅部"],
+    "習い事": ["ピアノ（水曜）", "水泳（土曜）", "英会話（金曜）", "書道（月曜）", "なし"],
+    "家族構成": ["父・母・本人・妹", "母・本人・弟", "父・母・兄・本人", "父・母・本人（一人っ子）"],
+    "家族の職業・学年": ["父：会社員 / 母：パート", "父：自営業 / 母：看護師", "兄：高2 / 本人：中2", "姉：大学1年"],
+    "通学校情報": ["駅から徒歩10分。給食あり。", "私服通学。土曜授業あり。", "2期制。定期テスト年4回。", "3期制。部活が盛ん。"],
+}
+
+# 特記事項
+SPECIAL_NOTE_SAMPLES = [
+    ("高", "アレルギーあり（そば）。教室での飲食に注意。"),
+    ("高", "保護者が離婚協議中。連絡は母のみに。"),
+    ("中", "人見知りが強い。少人数対応が望ましい。"),
+    ("中", "兄が当塾OB。難関校志望で意識が高い。"),
+    ("低", "送迎は基本的に祖母。"),
+    ("低", "本人の希望で席は前方固定。"),
+]
+
+# 保護者要望・クレーム
+PARENT_REQUEST_SAMPLES = {
+    "要望": [
+        "数学の補習を増やしてほしい。",
+        "面談の頻度を上げてほしい。",
+        "宿題の量を調整してほしい。",
+        "志望校の最新情報を共有してほしい。",
+    ],
+    "クレーム": [
+        "教室が騒がしいとのこと。改善要望。",
+        "請求金額に誤りがあるとの指摘。",
+        "担当講師の変更を希望。",
+    ],
+}
+
+# スタッフ記録のハッシュタグ候補
+STAFF_NOTE_TAGS = ["#成績", "#面談", "#欠席", "#志望校", "#宿題", "#モチベーション", "#保護者対応", "#進路", "#要フォロー"]
+
+# 欠席時フォロー種別
+MAKEUP_TYPES = ["映像視聴", "振替"]
+
 CONTACT_TYPES = ["電話報告", "面談", "保護者会", "テキスト報告", "メール"]
 ACTION_TYPES = ["trial_invitation", "phone_follow", "dm_campaign", "visit"]
 ACTION_TYPE_LABELS = {
@@ -83,6 +175,15 @@ ACTION_TYPE_LABELS = {
 def clear_all_tables(db: Session):
     """全テーブルのデータを削除 (FK制約を考慮した逆順)"""
     print("全テーブルをクリア中...")
+    # 多対多の関連テーブルを先に削除
+    db.execute(student_teachers.delete())
+    db.execute(class_teachers.delete())
+    db.query(Referral).delete()
+    db.query(ExamCertification).delete()
+    db.query(ParentRequest).delete()
+    db.query(ProfileMemo).delete()
+    db.query(SpecialNote).delete()
+    db.query(StudentPhone).delete()
     db.query(VideoLessonLog).delete()
     db.query(StaffNote).delete()
     db.query(SalesGoal).delete()
@@ -98,6 +199,7 @@ def clear_all_tables(db: Session):
     db.query(Enrollment).delete()
     db.query(EnrollmentEvent).delete()
     db.query(Student).delete()
+    db.query(ClassGroup).delete()
     db.query(Course).delete()
     db.query(User).delete()
     db.query(Classroom).delete()
@@ -219,7 +321,33 @@ def seed_courses(db: Session) -> list:
     return courses
 
 
-def seed_students(db: Session, classroom: Classroom, users: dict, courses: list) -> list:
+def seed_class_groups(db: Session, classroom: Classroom, users: dict) -> list:
+    """クラス(集団部門の組分け)を作成し、各クラスに担当講師1〜2名を割り当てる"""
+    teachers = users["teachers"]
+    class_groups = []
+    for idx, (name, grade, level, sort_order) in enumerate(CLASS_DEFS):
+        cg = ClassGroup(
+            name=name, grade=grade, level=level,
+            sort_order=sort_order, classroom_id=classroom.id,
+        )
+        db.add(cg)
+        db.flush()
+        # 担当講師1〜2名 (難関クラスは2名)
+        n_teachers = 2 if level == "難関" else random.randint(1, 2)
+        assigned = random.sample(teachers, k=min(n_teachers, len(teachers)))
+        cg.teachers = assigned
+        class_groups.append(cg)
+    db.flush()
+    return class_groups
+
+
+def _generate_member_number(idx: int) -> str:
+    """2から始まる10桁の会員番号を生成 (連番ベースで一意)"""
+    return f"2{(100000000 + idx):09d}"[:10]
+
+
+def seed_students(db: Session, classroom: Classroom, users: dict, courses: list,
+                  class_groups: list) -> list:
     """
     生徒80名を作成:
     - enrolled: 60名 (うち15名はat-risk設定)
@@ -287,18 +415,25 @@ def seed_students(db: Session, classroom: Classroom, users: dict, courses: list)
         elif status == "on_leave":
             enrolled_at = base_enrolled_date - timedelta(days=random.randint(30, 180))
 
-        # 担当講師をランダムに割り当て
+        # 担当講師をランダムに割り当て (代表1名。複数担当は後で設定)
         teacher = random.choice(teachers)
 
         # 学校名・学校区分
         school = random.choice(SCHOOLS)
         school_type = random.choices(SCHOOL_TYPES, weights=SCHOOL_TYPE_WEIGHTS)[0]
+        gender = random.choice(GENDERS)
 
         student = Student(
             name=fake.name(),
             grade=grade,
             school=school,
             school_type=school_type,
+            gender=gender,
+            parent_name=fake.last_name() + " " + fake.first_name(),
+            sibling_info=random.choice([
+                "弟（小4・当塾在籍）", "姉（高2・他塾）", "一人っ子", "兄（大学生）", "妹（小2）",
+            ]),
+            member_number=_generate_member_number(idx),
             status=status,
             enrolled_at=enrolled_at,
             trial_at=trial_at,
@@ -312,9 +447,20 @@ def seed_students(db: Session, classroom: Classroom, users: dict, courses: list)
         # 入退会イベント
         _seed_enrollment_events(db, student)
 
-        # 受講講座 (在籍・休会生徒のみ)
+        # 受講講座 (在籍・休会生徒のみ) → 受講部門を取得
+        selected_divisions = []
         if status in ["enrolled", "on_leave"]:
-            _seed_enrollments(db, student, courses)
+            selected_divisions = _seed_enrollments(db, student, courses)
+
+        # クラス所属 & 複数担当講師の割り当て
+        _assign_class_and_teachers(db, student, selected_divisions, class_groups, teachers)
+
+        # 詳細ページ用の追加情報
+        _seed_phones(db, student)
+        _seed_special_notes(db, student)
+        _seed_profile_memos(db, student)
+        _seed_parent_requests(db, student)
+        _seed_exam_certs(db, student)
 
         # 出欠データ
         _seed_attendances(db, student, profile)
@@ -375,6 +521,16 @@ def _seed_enrollment_events(db: Session, student: Student):
             note="体験授業参加",
         ))
 
+    # 入会テスト受験 (点数を記録)
+    if student.trial_at:
+        nyukai_score = random.randint(40, 95)
+        events.append(EnrollmentEvent(
+            student_id=student.id,
+            event_type="入会テスト受験",
+            occurred_at=datetime.combine(student.trial_at + timedelta(days=2), datetime.min.time()),
+            note=f"入会テスト {nyukai_score}点",
+        ))
+
     # 入会
     if student.enrolled_at:
         events.append(EnrollmentEvent(
@@ -383,6 +539,25 @@ def _seed_enrollment_events(db: Session, student: Student):
             occurred_at=datetime.combine(student.enrolled_at, datetime.min.time()),
             note="正式入会",
         ))
+
+    # 季節講習受講 (在籍生のみランダム)
+    if student.status in ["enrolled", "on_leave"] and student.enrolled_at:
+        for season, ymd in [("夏期講習", (2024, 7, 25)), ("冬期講習", (2024, 12, 24))]:
+            if random.random() < 0.7:
+                events.append(EnrollmentEvent(
+                    student_id=student.id,
+                    event_type="季節講習受講",
+                    occurred_at=datetime.combine(date(*ymd), datetime.min.time()),
+                    note=f"{season}を受講",
+                ))
+        # イベント参加
+        if random.random() < 0.5:
+            events.append(EnrollmentEvent(
+                student_id=student.id,
+                event_type="イベント参加",
+                occurred_at=datetime.combine(date.today() - timedelta(days=random.randint(20, 150)), datetime.min.time()),
+                note=random.choice(["保護者会", "進路説明会", "勉強合宿", "定期面談会"]),
+            ))
 
     # 休会・退会
     if student.status == "on_leave":
@@ -418,9 +593,12 @@ def _seed_enrollments(db: Session, student: Student, courses: list):
         filtered = [c for c in pool if c.course_type in types]
         return filtered if filtered else pool
 
-    # ランダムに1〜2部門選択
-    all_divisions = ["集団", "個別", "自立"]
-    selected_divisions = random.sample(all_divisions, k=random.randint(1, 2))
+    # ランダムに1〜2部門選択。高校生は集団部門なし。
+    if student.grade >= 10:
+        all_divisions = ["個別", "自立"]
+    else:
+        all_divisions = ["集団", "個別", "自立"]
+    selected_divisions = random.sample(all_divisions, k=random.randint(1, min(2, len(all_divisions))))
 
     started = student.enrolled_at or date.today() - timedelta(days=180)
     for division in selected_divisions:
@@ -436,6 +614,114 @@ def _seed_enrollments(db: Session, student: Student, courses: list):
             change_type="新規",
         )
         db.add(e)
+
+    return selected_divisions
+
+
+def _assign_class_and_teachers(db: Session, student: Student, selected_divisions: list,
+                               class_groups: list, teachers: list):
+    """
+    集団部門 & 中学生ならクラスに所属させ、クラス担当講師を担当に設定。
+    それ以外は個別に1〜2名の担当講師を設定。
+    """
+    assigned_teachers = []
+
+    if "集団" in selected_divisions and 7 <= student.grade <= 9:
+        candidates = [cg for cg in class_groups if cg.grade == student.grade]
+        if candidates:
+            cg = random.choice(candidates)
+            student.class_group_id = cg.id
+            assigned_teachers = list(cg.teachers)
+
+    # 集団でない、またはクラス講師が空の場合は個別担当を設定
+    if not assigned_teachers:
+        n = random.randint(1, 2)
+        assigned_teachers = random.sample(teachers, k=min(n, len(teachers)))
+
+    # 代表担当 + 複数担当
+    student.assigned_teacher_id = assigned_teachers[0].id if assigned_teachers else student.assigned_teacher_id
+    student.teachers = assigned_teachers
+    db.flush()
+
+
+def _seed_phones(db: Session, student: Student):
+    """電話番号を1〜3件生成 (番号は連携、メモは手入力イメージ)"""
+    memos = ["父の携帯", "母の携帯", "自宅", "祖母の携帯", "本人の携帯"]
+    n = random.randint(1, 3)
+    selected_memos = random.sample(memos, k=n)
+    for pos, memo in enumerate(selected_memos):
+        db.add(StudentPhone(
+            student_id=student.id,
+            phone_number=fake.phone_number(),
+            memo=memo,
+            position=pos,
+        ))
+
+
+def _seed_special_notes(db: Session, student: Student):
+    """特記事項を0〜2件生成"""
+    n = random.randint(0, 2)
+    for importance, content in random.sample(SPECIAL_NOTE_SAMPLES, k=min(n, len(SPECIAL_NOTE_SAMPLES))):
+        db.add(SpecialNote(student_id=student.id, importance=importance, content=content))
+
+
+def _seed_profile_memos(db: Session, student: Student):
+    """プロフィール定型メモをカテゴリ別に生成"""
+    for category in random.sample(PROFILE_CATEGORIES, k=random.randint(2, len(PROFILE_CATEGORIES))):
+        db.add(ProfileMemo(
+            student_id=student.id,
+            category=category,
+            content=random.choice(PROFILE_SAMPLES[category]),
+        ))
+
+
+def _seed_parent_requests(db: Session, student: Student):
+    """保護者要望・クレームを0〜2件生成"""
+    today = date.today()
+    n = random.randint(0, 2)
+    for _ in range(n):
+        req_type = random.choices(["要望", "クレーム"], weights=[0.75, 0.25])[0]
+        db.add(ParentRequest(
+            student_id=student.id,
+            request_type=req_type,
+            content=random.choice(PARENT_REQUEST_SAMPLES[req_type]),
+            status=random.choice(["対応中", "対応済"]),
+            occurred_at=datetime.combine(today - timedelta(days=random.randint(5, 200)), datetime.min.time()),
+        ))
+
+
+def _seed_exam_certs(db: Session, student: Student):
+    """英検・漢検の取得履歴を生成"""
+    today = date.today()
+    # 英検: 0〜3件 (受験予定含む)
+    n_eiken = random.randint(0, 3)
+    # 学年が上がるほど高い級を取りやすいよう開始位置を調整
+    base = min(student.grade - 6, len(EIKEN_LEVELS) - 2)
+    base = max(0, base)
+    for i in range(n_eiken):
+        lvl_idx = min(base + i, len(EIKEN_LEVELS) - 1)
+        is_future = (i == n_eiken - 1) and random.random() < 0.3
+        db.add(ExamCertification(
+            student_id=student.id,
+            exam_type="英検",
+            level=EIKEN_LEVELS[lvl_idx],
+            score=random.randint(1000, 2300) if not is_future else None,
+            result="受験予定" if is_future else random.choices(["合格", "不合格"], weights=[0.8, 0.2])[0],
+            exam_date=today - timedelta(days=random.randint(30, 600)) if not is_future else today + timedelta(days=random.randint(10, 60)),
+        ))
+    # 漢検: 0〜2件
+    n_kanken = random.randint(0, 2)
+    kbase = max(0, min(student.grade - 4, len(KANKEN_LEVELS) - 2))
+    for i in range(n_kanken):
+        lvl_idx = min(kbase + i, len(KANKEN_LEVELS) - 1)
+        db.add(ExamCertification(
+            student_id=student.id,
+            exam_type="漢検",
+            level=KANKEN_LEVELS[lvl_idx],
+            score=random.randint(120, 200),
+            result=random.choices(["合格", "不合格"], weights=[0.85, 0.15])[0],
+            exam_date=today - timedelta(days=random.randint(30, 600)),
+        ))
 
 
 def _seed_attendances(db: Session, student: Student, profile: dict):
@@ -462,18 +748,30 @@ def _seed_attendances(db: Session, student: Student, profile: dict):
                 continue
 
             rand = random.random()
+            makeup_type = None
+            makeup_note = None
             if rand < present_rate:
                 status = "present"
             elif rand < present_rate + 0.05:
                 status = "late"
             else:
                 status = "absent"
+                # 欠席の約6割は映像視聴または振替でフォロー
+                r = random.random()
+                if r < 0.35:
+                    makeup_type = "映像視聴"
+                    makeup_note = f"{random.choice(VIDEO_LESSON_CATEGORIES)}_{random.randint(1,50):02d}講 を視聴"
+                elif r < 0.60:
+                    makeup_type = "振替"
+                    makeup_note = f"{random.choice(['翌週','別曜日','土曜'])}クラスへ振替"
 
             att = Attendance(
                 student_id=student.id,
                 class_date=current,
                 status=status,
-                note="無断欠席" if status == "absent" and random.random() < 0.3 else None,
+                note="無断欠席" if status == "absent" and makeup_type is None and random.random() < 0.3 else None,
+                makeup_type=makeup_type,
+                makeup_note=makeup_note,
             )
             db.add(att)
 
@@ -520,48 +818,64 @@ def _seed_homeworks(db: Session, student: Student, teachers: list):
 
 
 def _seed_test_scores(db: Session, student: Student, profile: dict):
-    """4回分のテスト成績を生成"""
+    """
+    複数の試験種別ごとに成績を生成:
+    塾内試験A/B, 業者模試A/B, 学校定期テスト(2期 or 3期)
+    """
     # 基準スコア (生徒ごとにランダム)
-    base_scores = {s: random.gauss(65, 15) for s in SUBJECTS}
-
-    # クリッピング
-    base_scores = {s: max(20, min(100, v)) for s, v in base_scores.items()}
-
+    base_scores = {s: max(20, min(100, random.gauss(65, 15))) for s in SUBJECTS}
     # 成績下降フラグがある生徒は特定科目で連続下降を設定
     declining_subjects = random.sample(SUBJECTS, 2) if profile.get("is_declining") else []
 
-    for session_idx, session in enumerate(TEST_SESSIONS):
-        # 退会前のデータのみ
-        if student.withdrawn_at and session["test_date"] > student.withdrawn_at:
-            continue
+    # 学校定期テストは2期制 or 3期制をランダムに割り当て
+    term_sessions = random.choice([TERM_TESTS_2, TERM_TESTS_3])
 
-        for subject in SUBJECTS:
-            score = base_scores[subject]
+    test_groups = [
+        ("塾内試験A", INTERNAL_TEST_A, True),
+        ("塾内試験B", INTERNAL_TEST_B, True),
+        ("業者模試A", VENDOR_TEST_A, True),
+        ("業者模試B", VENDOR_TEST_B, True),
+        ("学校定期テスト", term_sessions, False),  # 定期テストは偏差値・順位なし
+    ]
 
-            if subject in declining_subjects:
-                # 3回連続で5-10点下降
-                decline = (session_idx + 1) * random.uniform(5, 10)
-                score = max(10, score - decline)
-            else:
-                # 自然なばらつき
-                score += random.gauss(0, 5)
+    for test_type, sessions, has_deviation in test_groups:
+        # 試験種別ごとの平均オフセット (難易度差を表現)
+        type_offset = {
+            "塾内試験A": 0, "塾内試験B": -3, "業者模試A": -5, "業者模試B": -4, "学校定期テスト": 8,
+        }.get(test_type, 0)
+
+        for session_idx, (test_id, test_name, ymd) in enumerate(sessions):
+            test_date = date(*ymd)
+            if student.withdrawn_at and test_date > student.withdrawn_at:
+                continue
+
+            for subject in SUBJECTS:
+                score = base_scores[subject] + type_offset
+                if subject in declining_subjects:
+                    score -= (session_idx + 1) * random.uniform(5, 10)
+                else:
+                    score += random.gauss(0, 5)
                 score = max(10, min(100, score))
 
-            # 偏差値計算 (クラス平均65, 標準偏差12と仮定)
-            deviation = 50 + (score - 65) / 12 * 10
+                deviation = None
+                rank = None
+                if has_deviation:
+                    deviation = round(max(20, min(80, 50 + (score - 65) / 12 * 10)), 1)
+                    rank = random.randint(1, 80)
 
-            ts = TestScore(
-                student_id=student.id,
-                test_id=session["test_id"],
-                test_name=session["test_name"],
-                subject=subject,
-                raw_score=round(score, 1),
-                rank=random.randint(1, 80),
-                deviation_value=round(max(20, min(80, deviation)), 1),
-                test_date=session["test_date"],
-                item_results={"correct": random.randint(5, 20), "total": 20},
-            )
-            db.add(ts)
+                ts = TestScore(
+                    student_id=student.id,
+                    test_id=test_id,
+                    test_name=test_name,
+                    test_type=test_type,
+                    subject=subject,
+                    raw_score=round(score, 1),
+                    rank=rank,
+                    deviation_value=deviation,
+                    test_date=test_date,
+                    item_results={"correct": random.randint(5, 20), "total": 20},
+                )
+                db.add(ts)
 
 
 def _seed_target_schools(db: Session, student: Student):
@@ -698,6 +1012,7 @@ def _seed_staff_notes(db: Session, student: Student, teachers: list):
             teacher_id=random.choice(teachers).id,
             note_type=note_type,
             content=random.choice(note_contents[note_type]),
+            tags=random.sample(STAFF_NOTE_TAGS, k=random.randint(1, 3)),
             occurred_at=occurred_at,
         )
         db.add(note)
@@ -812,6 +1127,36 @@ def _make_action_note(status: str) -> str:
     return random.choice(notes.get(status, ["対応中。"]))
 
 
+def _seed_referrals(db: Session, students_data: list):
+    """生徒間の紹介・被紹介履歴を生成 (在籍生の一部が他の在籍生を紹介)"""
+    students = [sd["student"] for sd in students_data if sd["student"].status in ["enrolled", "on_leave"]]
+    if len(students) < 4:
+        return
+
+    today = date.today()
+    # 全体の約25%が紹介者になる
+    referrers = random.sample(students, k=max(1, len(students) // 4))
+    for referrer in referrers:
+        # 在籍生を紹介 (60%) または 未入会の人物名 (40%)
+        if random.random() < 0.6:
+            candidate = random.choice([s for s in students if s.id != referrer.id])
+            db.add(Referral(
+                referrer_student_id=referrer.id,
+                referred_student_id=candidate.id,
+                referred_name=candidate.name,
+                occurred_at=today - timedelta(days=random.randint(30, 300)),
+                note="入会済み",
+            ))
+        else:
+            db.add(Referral(
+                referrer_student_id=referrer.id,
+                referred_student_id=None,
+                referred_name=fake.name(),
+                occurred_at=today - timedelta(days=random.randint(30, 300)),
+                note=random.choice(["体験申込", "資料請求のみ", "検討中"]),
+            ))
+
+
 def main():
     parser = argparse.ArgumentParser(description="シードデータを生成する")
     parser.add_argument("--force", action="store_true", help="既存データを削除して再生成")
@@ -843,10 +1188,18 @@ def main():
         courses = seed_courses(db)
         print(f"  講座作成: {len(courses)} 講座 (集団5・個別3・自立4)")
 
+        # クラス (集団部門)
+        class_groups = seed_class_groups(db, classroom, users)
+        print(f"  クラス作成: {len(class_groups)} クラス (中1〜中3)")
+
         # 生徒 + 関連データ
         print("  生徒データ生成中 (80名)...")
-        students_data = seed_students(db, classroom, users, courses)
+        students_data = seed_students(db, classroom, users, courses, class_groups)
         print(f"  生徒作成: {len(students_data)} 名")
+
+        # 紹介・被紹介履歴
+        _seed_referrals(db, students_data)
+        print("  紹介履歴作成完了")
 
         # 営業データ
         seed_sales(db, students_data, users)

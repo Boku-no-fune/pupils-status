@@ -22,6 +22,10 @@ class Attendance(Base):
     status = Column(String(20), nullable=False, default="present")
     note = Column(Text, nullable=True)
 
+    # 欠席時のフォロー: 映像視聴 / 振替 / None
+    makeup_type = Column(String(20), nullable=True)
+    makeup_note = Column(String(100), nullable=True)   # 振替先クラス・視聴映像名など
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

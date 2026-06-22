@@ -20,6 +20,8 @@ class TestScore(Base):
 
     test_id = Column(String(50), nullable=False, index=True)  # 例: "2024-09"
     test_name = Column(String(100), nullable=True)             # 例: "2024年9月模試"
+    # 試験種別: 塾内試験A/塾内試験B/業者模試A/業者模試B/学校定期テスト/その他
+    test_type = Column(String(30), nullable=True, index=True)
     subject = Column(String(20), nullable=False)               # 国語/数学/英語/理科/社会
     raw_score = Column(Float, nullable=False)
     rank = Column(Integer, nullable=True)                      # 順位

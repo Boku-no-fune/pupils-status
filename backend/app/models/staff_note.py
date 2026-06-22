@@ -3,7 +3,7 @@
 講師が入力する電話報告・保護者面談・生徒ミーティング記録など
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -22,6 +22,7 @@ class StaffNote(Base):
 
     note_type = Column(String(30), nullable=False)   # 電話報告/保護者面談/生徒ミーティング/その他
     content = Column(Text, nullable=False)            # 記録内容
+    tags = Column(JSON, nullable=True)               # ハッシュタグ分類 (["#成績", "#面談"])
     occurred_at = Column(DateTime(timezone=True), nullable=False)  # 発生日時
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

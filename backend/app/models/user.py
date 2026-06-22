@@ -35,3 +35,8 @@ class User(Base):
     checked_homeworks = relationship("Homework", back_populates="checker")
     created_sales_goals = relationship("SalesGoal", back_populates="creator")
     staff_notes = relationship("StaffNote", back_populates="teacher")
+    # 複数担当: クラス担当 + 個別担当生徒
+    teaching_classes = relationship("ClassGroup", secondary="class_teachers",
+                                    back_populates="teachers")
+    responsible_students = relationship("Student", secondary="student_teachers",
+                                        back_populates="teachers")

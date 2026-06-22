@@ -5,7 +5,11 @@
 from app.models.classroom import Classroom
 from app.models.user import User
 from app.models.course import Course
+from app.models.class_group import ClassGroup, class_teachers, student_teachers
 from app.models.student import Student
+from app.models.student_extras import (
+    StudentPhone, SpecialNote, ProfileMemo, ParentRequest, Referral, ExamCertification,
+)
 from app.models.enrollment import EnrollmentEvent, Enrollment
 from app.models.attendance import Attendance, RoomLog
 from app.models.homework import Homework
@@ -20,7 +24,16 @@ __all__ = [
     "Classroom",
     "User",
     "Course",
+    "ClassGroup",
+    "class_teachers",
+    "student_teachers",
     "Student",
+    "StudentPhone",
+    "SpecialNote",
+    "ProfileMemo",
+    "ParentRequest",
+    "Referral",
+    "ExamCertification",
     "EnrollmentEvent",
     "Enrollment",
     "Attendance",

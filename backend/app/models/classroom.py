@@ -20,3 +20,4 @@ class Classroom(Base):
     # リレーション
     users = relationship("User", back_populates="classroom")
     students = relationship("Student", back_populates="classroom")
+    class_groups = relationship("ClassGroup", backref="classroom")
