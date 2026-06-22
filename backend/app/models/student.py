@@ -3,7 +3,7 @@
 ステータス: enrolled(在籍) / trial(体験) / on_leave(休会) / withdrawn(退会)
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Date, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Date, Text, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -32,6 +32,13 @@ class Student(Base):
     gender = Column(String(4), nullable=True)            # 男 / 女
     parent_name = Column(String(100), nullable=True)     # 保護者氏名
     sibling_info = Column(Text, nullable=True)           # 兄弟姉妹情報
+
+    # 住所・座標 (地図プロット用ダミー: 東京都内)
+    address = Column(String(255), nullable=True)
+    home_lat = Column(Float, nullable=True)
+    home_lng = Column(Float, nullable=True)
+    school_lat = Column(Float, nullable=True)
+    school_lng = Column(Float, nullable=True)
 
     # 在籍ステータス
     status = Column(String(20), nullable=False, default="enrolled")

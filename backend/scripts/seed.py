@@ -32,6 +32,7 @@ from app.models import (
     Payment, ParentContact,
     SalesAction, SalesGoal,
     StaffNote, VideoLessonLog,
+    Prospect, ProspectStage,
 )
 from app.database import Base
 from app.services.auth_service import hash_password
@@ -165,6 +166,30 @@ STAFF_NOTE_TAGS = ["#成績", "#面談", "#欠席", "#志望校", "#宿題", "#�
 # 欠席時フォロー種別
 MAKEUP_TYPES = ["映像視聴", "振替"]
 
+# 地図(東京都内ダミー座標)。教室は渋谷想定。
+CLASSROOM_LATLNG = (35.6618, 139.7041)  # 渋谷駅付近
+# 各学校に固定の東京都内座標を割当
+SCHOOL_COORDS = {
+    "桜木中学校": (35.6699, 139.7100), "緑ヶ丘中学校": (35.6488, 139.7100), "東光中学校": (35.6780, 139.7180),
+    "北星中学校": (35.6900, 139.6950), "南岡中学校": (35.6450, 139.6900), "第一中学校": (35.6600, 139.7250),
+    "第二中学校": (35.6720, 139.6850), "城南中学校": (35.6380, 139.7150), "港南中学校": (35.6300, 139.7400),
+    "西丘中学校": (35.6850, 139.6800), "光陵高等学校": (35.7000, 139.7300), "翠嵐高等学校": (35.6550, 139.7500),
+    "希望ヶ丘高等学校": (35.6250, 139.6750), "横浜翠陵高等学校": (35.6950, 139.7450), "湘南高等学校": (35.6400, 139.7350),
+}
+
+# 未入会(見込み客)
+PROSPECT_SOURCES = ["HP問い合わせ", "チラシ", "紹介", "看板", "Web広告", "電話"]
+PROSPECT_STAGES = ["問い合わせ", "資料請求", "入会テスト", "体験授業", "イベント参加", "季節講習受講"]
+STAGE_STATUSES = ["未対応", "対応中", "完了"]
+PROSPECT_STAGE_MEMOS = {
+    "問い合わせ": ["HPフォームより問い合わせ。", "電話で受講相談。", "知人の紹介で来塾相談。"],
+    "資料請求": ["パンフレット送付済み。", "資料DL後フォロー連絡。"],
+    "入会テスト": ["入会テスト受験。結果は標準。", "受験予定。日程調整中。", "受験済み。学力良好。"],
+    "体験授業": ["体験授業に参加。好感触。", "体験日程を案内中。", "体験後、検討中とのこと。"],
+    "イベント参加": ["保護者説明会に参加。", "夏祭りイベントに来場。"],
+    "季節講習受講": ["夏期講習を申込。", "冬期講習を案内中。", "季節講習を検討中。"],
+}
+
 CONTACT_TYPES = ["電話報告", "面談", "保護者会", "テキスト報告", "メール"]
 ACTION_TYPES = ["trial_invitation", "phone_follow", "dm_campaign", "visit"]
 ACTION_TYPE_LABELS = {
@@ -181,6 +206,8 @@ def clear_all_tables(db: Session):
     # 多対多の関連テーブルを先に削除
     db.execute(student_teachers.delete())
     db.execute(class_teachers.delete())
+    db.query(ProspectStage).delete()
+    db.query(Prospect).delete()
     db.query(Referral).delete()
     db.query(ExamCertification).delete()
     db.query(ParentRequest).delete()
@@ -437,6 +464,10 @@ def seed_students(db: Session, classroom: Classroom, users: dict, courses: list,
         school_type = random.choices(SCHOOL_TYPES, weights=SCHOOL_TYPE_WEIGHTS)[0]
         gender = random.choice(GENDERS)
 
+        # 住所・座標 (東京都内ダミー)
+        home_lat, home_lng = _tokyo_home_coords()
+        school_lat, school_lng = SCHOOL_COORDS.get(school, CLASSROOM_LATLNG)
+
         student = Student(
             name=fake.name(),
             grade=grade,
@@ -448,6 +479,9 @@ def seed_students(db: Session, classroom: Classroom, users: dict, courses: list,
                 "弟（小4・当塾在籍）", "姉（高2・他塾）", "一人っ子", "兄（大学生）", "妹（小2）",
             ]),
             member_number=_generate_member_number(idx),
+            address=f"東京都{fake.town()}{random.randint(1,5)}-{random.randint(1,20)}-{random.randint(1,30)}",
+            home_lat=home_lat, home_lng=home_lng,
+            school_lat=school_lat, school_lng=school_lng,
             status=status,
             enrolled_at=enrolled_at,
             trial_at=trial_at,
@@ -1141,6 +1175,77 @@ def _make_action_note(status: str) -> str:
     return random.choice(notes.get(status, ["対応中。"]))
 
 
+def _tokyo_home_coords():
+    """教室(渋谷)周辺の東京都内ダミー座標を返す"""
+    lat = CLASSROOM_LATLNG[0] + random.uniform(-0.05, 0.05)
+    lng = CLASSROOM_LATLNG[1] + random.uniform(-0.06, 0.06)
+    return round(lat, 6), round(lng, 6)
+
+
+def seed_prospects(db: Session, users: dict):
+    """
+    未入会(見込み)生徒を作成。各見込み客は入会前ファネルの一部ステージまで進んでいる。
+    イベント参加・季節講習受講ステージは時期(直近)に応じて付与。
+    """
+    teachers = users["teachers"]
+    today = date.today()
+    count = 24
+    prospects = []
+
+    for i in range(count):
+        grade = random.randint(7, 12)
+        school = random.choice(SCHOOLS)
+        home_lat, home_lng = _tokyo_home_coords()
+        first_contact = today - timedelta(days=random.randint(5, 120))
+
+        p = Prospect(
+            name=fake.name(),
+            grade=grade,
+            school=school,
+            source=random.choice(PROSPECT_SOURCES),
+            address=f"東京都{fake.town()}{random.randint(1,5)}-{random.randint(1,20)}",
+            home_lat=home_lat, home_lng=home_lng,
+            status="active",
+            assigned_to=random.choice(teachers).id,
+            first_contact_at=first_contact,
+            note=None,
+        )
+        db.add(p)
+        db.flush()
+
+        # ファネルの到達度 (1〜6ステージ目まで進む)
+        reached = random.randint(1, len(PROSPECT_STAGES))
+        for s_idx, stage in enumerate(PROSPECT_STAGES):
+            # イベント参加・季節講習は時期次第でスキップされることがある
+            if stage in ("イベント参加", "季節講習受講") and random.random() < 0.4:
+                continue
+
+            if s_idx < reached - 1:
+                status = "完了"
+            elif s_idx == reached - 1:
+                status = random.choice(["対応中", "完了"])
+            else:
+                status = "未対応"
+
+            memo = None
+            occurred = None
+            if status != "未対応":
+                memo = random.choice(PROSPECT_STAGE_MEMOS.get(stage, ["対応中。"]))
+                occurred = first_contact + timedelta(days=s_idx * random.randint(3, 14))
+
+            db.add(ProspectStage(
+                prospect_id=p.id,
+                stage=stage,
+                status=status,
+                memo=memo,
+                sort_order=s_idx,
+                occurred_at=occurred,
+            ))
+        prospects.append(p)
+
+    return prospects
+
+
 def _seed_referrals(db: Session, students_data: list):
     """生徒間の紹介・被紹介履歴を生成 (在籍生の一部が他の在籍生を紹介)"""
     students = [sd["student"] for sd in students_data if sd["student"].status in ["enrolled", "on_leave"]]
@@ -1218,6 +1323,10 @@ def main():
         # 営業データ
         seed_sales(db, students_data, users)
         print("  営業データ作成完了")
+
+        # 未入会(見込み)生徒
+        prospects = seed_prospects(db, users)
+        print(f"  未入会(見込み)生徒作成: {len(prospects)} 名")
 
         db.commit()
         print("\nシードデータ生成完了!")

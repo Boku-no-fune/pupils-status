@@ -19,6 +19,7 @@ from app.services.dashboard_service import (
 from app.services.student_service import get_student_list
 from app.services.risk_service import get_all_risk_students
 from app.services.learning_service import get_learning_progress
+from app.services.activity_service import get_activity_matrix
 from app.dependencies.auth import get_current_user, require_roles
 from app.models.class_group import ClassGroup
 from app.models.student import Student
@@ -164,6 +165,61 @@ def risk_students_tab(
     if current_user.role == "room_manager" and not classroom_id:
         classroom_id = current_user.classroom_id
     return get_all_risk_students(db, classroom_id)
+
+
+@router.get("/activity-matrix")
+def activity_matrix(
+    months: int = Query(6, ge=1, le=12),
+    classroom_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "room_manager")),
+):
+    """スタッフ記録・保護者アプローチの月別実施状況 (生徒×月のマトリクス)"""
+    if current_user.role == "room_manager" and not classroom_id:
+        classroom_id = current_user.classroom_id
+    return get_activity_matrix(db, months, classroom_id)
+
+
+@router.get("/map-data")
+def map_data(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "room_manager")),
+):
+    """通塾元(生徒の自宅)・通学校の座標 (地図プロット用)"""
+    students = db.query(Student).filter(
+        Student.status.in_(["enrolled", "trial", "on_leave"]),
+        Student.home_lat.isnot(None),
+    ).all()
+
+    student_points = [
+        {
+            "id": s.id,
+            "name": s.name,
+            "grade": s.grade,
+            "school": s.school,
+            "address": s.address,
+            "home_lat": s.home_lat,
+            "home_lng": s.home_lng,
+            "school_lat": s.school_lat,
+            "school_lng": s.school_lng,
+            "class_label": s.class_group.name if s.class_group else None,
+        }
+        for s in students
+    ]
+
+    # 学校は重複排除して集計 (通学者数付き)
+    schools: dict = {}
+    for s in students:
+        if s.school and s.school_lat is not None:
+            if s.school not in schools:
+                schools[s.school] = {"name": s.school, "lat": s.school_lat, "lng": s.school_lng, "count": 0}
+            schools[s.school]["count"] += 1
+
+    return {
+        "classroom": {"name": "学習塾サンプル校", "lat": 35.6618, "lng": 139.7041},
+        "students": student_points,
+        "schools": list(schools.values()),
+    }
 
 
 @router.get("/teachers")

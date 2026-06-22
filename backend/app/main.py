@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import auth, students, attendances, contacts, sales, dashboard, ai
+from app.routers import auth, students, attendances, contacts, sales, dashboard, ai, prospects
 
 # FastAPIアプリ作成
 app = FastAPI(
@@ -50,3 +50,4 @@ app.include_router(contacts.payment_router, prefix="/api")
 app.include_router(sales.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(ai.router, prefix="/api")
+app.include_router(prospects.router, prefix="/api")

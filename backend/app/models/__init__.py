@@ -19,6 +19,7 @@ from app.models.contact import ParentContact
 from app.models.sales import SalesAction, SalesGoal
 from app.models.staff_note import StaffNote
 from app.models.video_lesson_log import VideoLessonLog
+from app.models.prospect import Prospect, ProspectStage
 
 __all__ = [
     "Classroom",
@@ -48,4 +49,6 @@ __all__ = [
     "SalesGoal",
     "StaffNote",
     "VideoLessonLog",
+    "Prospect",
+    "ProspectStage",
 ]

@@ -163,6 +163,18 @@ class StaffNoteCreate(PydanticBase):
     occurred_at: datetime
 
 
+@router.get("/{student_id}/activities")
+def list_activities(
+    student_id: int,
+    month: str = Query(..., description="YYYY-MM"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """指定月のスタッフ記録+保護者アプローチ明細 (月別実施状況のポップアップ用)"""
+    from app.services.activity_service import get_student_activities
+    return get_student_activities(db, student_id, month)
+
+
 @router.get("/{student_id}/staff-notes")
 def list_staff_notes(
     student_id: int,
