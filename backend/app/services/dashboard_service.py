@@ -52,10 +52,12 @@ def get_dashboard_stats(db: Session, classroom_id: Optional[int] = None) -> Dict
 def get_attendance_trend(
     db: Session,
     classroom_id: Optional[int] = None,
-    months: int = 6
+    months: int = 6,
+    class_group_id: Optional[int] = None,
 ) -> List[Dict]:
     """
     過去N ヶ月の月別出席率推移 (Tab2折れ線グラフ用)
+    class_group_id を指定するとクラス別に絞り込む
     """
     today = date.today()
     results = []
@@ -81,6 +83,10 @@ def get_attendance_trend(
         if classroom_id:
             student_ids_query = student_ids_query.filter(
                 Student.classroom_id == classroom_id
+            )
+        if class_group_id:
+            student_ids_query = student_ids_query.filter(
+                Student.class_group_id == class_group_id
             )
         student_ids = [r[0] for r in student_ids_query.all()]
 
@@ -120,16 +126,23 @@ def get_attendance_trend(
 def get_score_trend(
     db: Session,
     classroom_id: Optional[int] = None,
-    months: int = 6
+    months: int = 6,
+    class_group_id: Optional[int] = None,
+    test_type: Optional[str] = None,
 ) -> List[Dict]:
     """
-    過去N ヶ月の科目別平均スコア推移 (Tab2棒グラフ用)
+    過去N ヶ月の科目別平均スコア推移 (Tab2棒/折れ線グラフ用)
+    class_group_id でクラス絞り込み、test_type で試験種別を切り替え
     """
     # 対象生徒
     student_ids_query = db.query(Student.id)
     if classroom_id:
         student_ids_query = student_ids_query.filter(
             Student.classroom_id == classroom_id
+        )
+    if class_group_id:
+        student_ids_query = student_ids_query.filter(
+            Student.class_group_id == class_group_id
         )
     student_ids = [r[0] for r in student_ids_query.all()]
 
@@ -138,10 +151,13 @@ def get_score_trend(
 
     cutoff = date.today() - timedelta(days=months * 31)
 
-    scores = db.query(TestScore).filter(
+    score_query = db.query(TestScore).filter(
         TestScore.student_id.in_(student_ids),
         TestScore.test_date >= cutoff,
-    ).order_by(TestScore.test_date).all()
+    )
+    if test_type:
+        score_query = score_query.filter(TestScore.test_type == test_type)
+    scores = score_query.order_by(TestScore.test_date).all()
 
     # test_idごとにグループ化
     sessions: Dict[str, Dict] = {}
@@ -214,3 +230,50 @@ def get_sales_progress(db: Session, period: Optional[str] = None) -> List[Dict]:
         })
 
     return results
+
+
+def get_stat_students(
+    db: Session,
+    kind: str,
+    classroom_id: Optional[int] = None,
+) -> List[Dict]:
+    """
+    ダッシュボード上部カードのドリルダウン用 生徒リスト
+    kind:
+      - "on_leave":       休会中の生徒
+      - "high_risk":      高リスク (出席率60%未満) の在籍生
+      - "low_attendance": 出席率の低い在籍生 (低い順)
+    """
+    query = db.query(Student)
+    if classroom_id:
+        query = query.filter(Student.classroom_id == classroom_id)
+
+    def brief(s: Student, rate: Optional[float] = None) -> Dict:
+        return {
+            "id": s.id,
+            "name": s.name,
+            "grade": s.grade,
+            "status": s.status,
+            "class_label": s.class_group.name if s.class_group else None,
+            "attendance_rate_30d": rate if rate is not None else compute_attendance_rate(s.id, db),
+            "assigned_teacher_name": s.assigned_teacher.name if s.assigned_teacher else None,
+        }
+
+    if kind == "on_leave":
+        students = query.filter(Student.status == "on_leave").all()
+        return [brief(s) for s in students]
+
+    # high_risk / low_attendance は在籍・体験生が対象
+    active = query.filter(Student.status.in_(["enrolled", "trial"])).all()
+    scored = [(s, compute_attendance_rate(s.id, db)) for s in active]
+
+    if kind == "high_risk":
+        items = [(s, r) for s, r in scored if r < 60]
+        items.sort(key=lambda x: x[1])
+        return [brief(s, r) for s, r in items]
+
+    if kind == "low_attendance":
+        scored.sort(key=lambda x: x[1])
+        return [brief(s, r) for s, r in scored[:15]]
+
+    return []

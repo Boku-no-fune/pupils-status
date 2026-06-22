@@ -81,40 +81,43 @@ CLASS_DEFS = [
 
 GENDERS = ["男", "女"]
 
-# 試験種別ごとのセッション定義 (test_id, test_name, 月日(year,month,day))
+# 試験種別ごとのセッション定義 (test_id, test_name, Nヶ月前)
+# 日付は seed 実行時の today を基準に相対計算するため、常に直近データになる
 INTERNAL_TEST_A = [  # 塾内試験A
-    ("juku-a-2024-10", "塾内試験A 第3回", (2024, 10, 5)),
-    ("juku-a-2024-12", "塾内試験A 第4回", (2024, 12, 7)),
-    ("juku-a-2025-02", "塾内試験A 第5回", (2025, 2, 8)),
+    ("juku-a-1", "塾内試験A 第1回", 8),
+    ("juku-a-2", "塾内試験A 第2回", 6),
+    ("juku-a-3", "塾内試験A 第3回", 4),
+    ("juku-a-4", "塾内試験A 第4回", 2),
 ]
 INTERNAL_TEST_B = [  # 塾内試験B
-    ("juku-b-2024-10", "塾内試験B 第3回", (2024, 10, 19)),
-    ("juku-b-2024-12", "塾内試験B 第4回", (2024, 12, 21)),
-    ("juku-b-2025-02", "塾内試験B 第5回", (2025, 2, 22)),
+    ("juku-b-1", "塾内試験B 第1回", 7),
+    ("juku-b-2", "塾内試験B 第2回", 5),
+    ("juku-b-3", "塾内試験B 第3回", 3),
+    ("juku-b-4", "塾内試験B 第4回", 1),
 ]
-VENDOR_TEST_A = [  # 業者模試A (旧 TEST_SESSIONS 相当)
-    ("gyosha-a-2024-09", "業者模試A 9月", (2024, 9, 15)),
-    ("gyosha-a-2024-11", "業者模試A 11月", (2024, 11, 17)),
-    ("gyosha-a-2025-01", "業者模試A 1月", (2025, 1, 19)),
+VENDOR_TEST_A = [  # 業者模試A
+    ("gyosha-a-1", "業者模試A 第1回", 9),
+    ("gyosha-a-2", "業者模試A 第2回", 6),
+    ("gyosha-a-3", "業者模試A 第3回", 3),
 ]
 VENDOR_TEST_B = [  # 業者模試B
-    ("gyosha-b-2024-10", "業者模試B 10月", (2024, 10, 13)),
-    ("gyosha-b-2025-01", "業者模試B 1月", (2025, 1, 26)),
+    ("gyosha-b-1", "業者模試B 第1回", 8),
+    ("gyosha-b-2", "業者模試B 第2回", 4),
 ]
 
-# 学校定期テスト (2期制 / 3期制)
+# 学校定期テスト (2期制 / 3期制) — ラベルは保持しつつ相対日付化
 TERM_TESTS_2 = [  # 2期制
-    ("teiki-2024-zenki-chukan", "前期中間", (2024, 5, 23)),
-    ("teiki-2024-zenki-kimatsu", "前期期末", (2024, 6, 27)),
-    ("teiki-2024-koki-chukan", "後期中間", (2024, 11, 21)),
-    ("teiki-2024-koki-kimatsu", "後期期末", (2025, 2, 20)),
+    ("teiki-2-1", "前期中間", 12),
+    ("teiki-2-2", "前期期末", 11),
+    ("teiki-2-3", "後期中間", 7),
+    ("teiki-2-4", "後期期末", 4),
 ]
 TERM_TESTS_3 = [  # 3期制
-    ("teiki-2024-1-chukan", "1学期中間", (2024, 5, 23)),
-    ("teiki-2024-1-kimatsu", "1学期期末", (2024, 6, 27)),
-    ("teiki-2024-2-chukan", "2学期中間", (2024, 10, 10)),
-    ("teiki-2024-2-kimatsu", "2学期期末", (2024, 11, 28)),
-    ("teiki-2024-3-kimatsu", "3学期期末", (2025, 2, 27)),
+    ("teiki-3-1", "1学期中間", 12),
+    ("teiki-3-2", "1学期期末", 11),
+    ("teiki-3-3", "2学期中間", 8),
+    ("teiki-3-4", "2学期期末", 7),
+    ("teiki-3-5", "3学期期末", 4),
 ]
 
 # 英検・漢検の級
@@ -344,6 +347,17 @@ def seed_class_groups(db: Session, classroom: Classroom, users: dict) -> list:
 def _generate_member_number(idx: int) -> str:
     """2から始まる10桁の会員番号を生成 (連番ベースで一意)"""
     return f"2{(100000000 + idx):09d}"[:10]
+
+
+def _months_ago_date(n: int) -> date:
+    """today からNヶ月前の日付 (中旬) を返す。試験日を常に直近にするため。"""
+    today = date.today()
+    month = today.month - n
+    year = today.year
+    while month <= 0:
+        month += 12
+        year -= 1
+    return date(year, month, 15)
 
 
 def seed_students(db: Session, classroom: Classroom, users: dict, courses: list,
@@ -844,8 +858,8 @@ def _seed_test_scores(db: Session, student: Student, profile: dict):
             "塾内試験A": 0, "塾内試験B": -3, "業者模試A": -5, "業者模試B": -4, "学校定期テスト": 8,
         }.get(test_type, 0)
 
-        for session_idx, (test_id, test_name, ymd) in enumerate(sessions):
-            test_date = date(*ymd)
+        for session_idx, (test_id, test_name, months_ago) in enumerate(sessions):
+            test_date = _months_ago_date(months_ago)
             if student.withdrawn_at and test_date > student.withdrawn_at:
                 continue
 

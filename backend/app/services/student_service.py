@@ -89,12 +89,15 @@ def get_student_list(
     search: Optional[str] = None,
     school_type: Optional[str] = None,
     division: Optional[str] = None,
+    sort_by: str = "grade",
+    sort_dir: str = "asc",
     page: int = 1,
     per_page: int = 20,
 ) -> dict:
     """
     生徒一覧を取得 (ダッシュボードTab1用)
-    last_visit, attendance_rate, grade_change を付加する
+    member_number, クラス, last_visit, attendance_rate, grade_change を付加する
+    並び替えは派生列も含むため Python 側で実施 (デフォルト: 学年→クラス 昇順)
     """
     from app.models.enrollment import Enrollment
     from app.models.course import Course
@@ -106,7 +109,14 @@ def get_student_list(
     if grade:
         query = query.filter(Student.grade == grade)
     if teacher_id:
-        query = query.filter(Student.assigned_teacher_id == teacher_id)
+        # 複数担当 (student_teachers) または代表担当のいずれかに一致
+        from app.models.class_group import student_teachers
+        st_subq = db.query(student_teachers.c.student_id).filter(
+            student_teachers.c.user_id == teacher_id
+        ).subquery()
+        query = query.filter(
+            (Student.assigned_teacher_id == teacher_id) | (Student.id.in_(st_subq))
+        )
     if classroom_id:
         query = query.filter(Student.classroom_id == classroom_id)
     if search:
@@ -120,8 +130,7 @@ def get_student_list(
         ).subquery()
         query = query.filter(Student.id.in_(subq))
 
-    total = query.count()
-    students = query.order_by(Student.name).offset((page - 1) * per_page).limit(per_page).all()
+    students = query.all()
 
     results = []
     for s in students:
@@ -130,24 +139,67 @@ def get_student_list(
         attendance_rate = compute_attendance_rate(s.id, db)
         grade_change = get_recent_grade_change(s.id, db)
 
+        # クラス表示: 集団=クラス名 / それ以外=部門名
+        active_divisions = sorted({
+            e.course.division for e in s.enrollments
+            if e.course and e.course.division and not e.ended_at
+        })
+        if s.class_group:
+            class_label = s.class_group.name
+            class_sort = s.class_group.sort_order
+        elif active_divisions:
+            class_label = " / ".join(active_divisions)
+            class_sort = 100
+        else:
+            class_label = None
+            class_sort = 999
+
         results.append({
             "id": s.id,
             "name": s.name,
+            "member_number": s.member_number,
             "grade": s.grade,
             "school": s.school,
             "school_type": s.school_type,
             "status": s.status,
+            "class_label": class_label,
+            "class_sort": class_sort,
+            "divisions": active_divisions,
             "enrolled_at": s.enrolled_at,
             "withdrawn_at": s.withdrawn_at,
             "assigned_teacher_id": s.assigned_teacher_id,
             "assigned_teacher_name": teacher_name,
+            "teachers": [{"id": t.id, "name": t.name} for t in s.teachers],
             "classroom_id": s.classroom_id,
             "last_visit": last_visit,
             "attendance_rate_30d": attendance_rate,
             "recent_grade_change": grade_change,
         })
 
-    return {"total": total, "page": page, "per_page": per_page, "students": results}
+    # 並び替え (派生列対応)
+    def sort_key(r):
+        if sort_by == "name":
+            return (r["name"] or "",)
+        if sort_by == "member_number":
+            return (r["member_number"] or "",)
+        if sort_by == "status":
+            return (r["status"] or "",)
+        if sort_by == "class":
+            return (r["class_sort"], r["grade"])
+        if sort_by == "last_visit":
+            return (r["last_visit"] or date.min,)
+        if sort_by == "attendance_rate_30d":
+            return (r["attendance_rate_30d"] if r["attendance_rate_30d"] is not None else -1,)
+        # default: grade → class
+        return (r["grade"], r["class_sort"])
+
+    results.sort(key=sort_key, reverse=(sort_dir == "desc"))
+
+    total = len(results)
+    start = (page - 1) * per_page
+    paged = results[start:start + per_page]
+
+    return {"total": total, "page": page, "per_page": per_page, "students": paged}
 
 
 def get_student_detail(student_id: int, db: Session) -> Optional[dict]:
@@ -207,12 +259,13 @@ def get_student_detail(student_id: int, db: Session) -> Optional[dict]:
             "id": sn.id,
             "note_type": sn.note_type,
             "content": sn.content,
+            "tags": sn.tags or [],
             "occurred_at": sn.occurred_at,
             "teacher_id": sn.teacher_id,
             "teacher_name": teacher_n,
         })
 
-    # 映像授業ログ (直近50件)
+    # 映像授業ログ (直近100件)
     video_logs = [
         {
             "id": vl.id,
@@ -223,7 +276,45 @@ def get_student_detail(student_id: int, db: Session) -> Optional[dict]:
             "completion_rate": vl.completion_rate,
             "source_system": vl.source_system,
         }
-        for vl in student.video_lesson_logs[:50]
+        for vl in student.video_lesson_logs[:100]
+    ]
+
+    # 受講部門 (重複排除・在籍中のみ)
+    divisions = sorted({
+        e.course.division for e in student.enrollments
+        if e.course and e.course.division and not e.ended_at
+    })
+
+    # クラス情報
+    class_group = None
+    if student.class_group:
+        class_group = {
+            "id": student.class_group.id,
+            "name": student.class_group.name,
+            "level": student.class_group.level,
+            "grade": student.class_group.grade,
+        }
+
+    # 紹介・被紹介
+    referrals_made = [
+        {
+            "id": r.id,
+            "referred_student_id": r.referred_student_id,
+            "referred_name": r.referred_name,
+            "occurred_at": r.occurred_at,
+            "note": r.note,
+        }
+        for r in student.referrals_made
+    ]
+    referrals_received = [
+        {
+            "id": r.id,
+            "referrer_student_id": r.referrer_student_id,
+            "referrer_name": r.referrer.name if r.referrer else None,
+            "occurred_at": r.occurred_at,
+            "note": r.note,
+        }
+        for r in student.referrals_received
     ]
 
     return {
@@ -233,6 +324,10 @@ def get_student_detail(student_id: int, db: Session) -> Optional[dict]:
         "school": student.school,
         "school_type": student.school_type,
         "photo_data": student.photo_data,
+        "member_number": student.member_number,
+        "gender": student.gender,
+        "parent_name": student.parent_name,
+        "sibling_info": student.sibling_info,
         "status": student.status,
         "enrolled_at": student.enrolled_at,
         "trial_at": student.trial_at,
@@ -240,9 +335,37 @@ def get_student_detail(student_id: int, db: Session) -> Optional[dict]:
         "assigned_teacher_id": student.assigned_teacher_id,
         "assigned_teacher_name": teacher_name,
         "classroom_id": student.classroom_id,
+        "class_group_id": student.class_group_id,
+        "class_group": class_group,
+        "divisions": divisions,
+        "teachers": [{"id": t.id, "name": t.name, "role": t.role} for t in student.teachers],
         "last_visit": last_visit,
         "attendance_rate_30d": attendance_rate,
         "recent_grade_change": grade_change,
+        "phones": [
+            {"id": p.id, "phone_number": p.phone_number, "memo": p.memo, "position": p.position}
+            for p in student.phones
+        ],
+        "special_notes": [
+            {"id": sn.id, "content": sn.content, "importance": sn.importance, "created_at": sn.created_at}
+            for sn in student.special_notes
+        ],
+        "profile_memos": [
+            {"id": pm.id, "category": pm.category, "content": pm.content, "created_at": pm.created_at}
+            for pm in student.profile_memos
+        ],
+        "parent_requests": [
+            {"id": pr.id, "request_type": pr.request_type, "content": pr.content,
+             "status": pr.status, "occurred_at": pr.occurred_at}
+            for pr in student.parent_requests
+        ],
+        "exam_certifications": [
+            {"id": ec.id, "exam_type": ec.exam_type, "level": ec.level, "score": ec.score,
+             "result": ec.result, "exam_date": ec.exam_date}
+            for ec in student.exam_certifications
+        ],
+        "referrals_made": referrals_made,
+        "referrals_received": referrals_received,
         "enrollment_events": [
             {"id": e.id, "event_type": e.event_type, "occurred_at": e.occurred_at, "note": e.note}
             for e in student.enrollment_events
@@ -259,7 +382,8 @@ def get_student_detail(student_id: int, db: Session) -> Optional[dict]:
             for e in student.enrollments
         ],
         "recent_attendances": [
-            {"id": a.id, "class_date": a.class_date, "status": a.status, "note": a.note}
+            {"id": a.id, "class_date": a.class_date, "status": a.status, "note": a.note,
+             "makeup_type": a.makeup_type, "makeup_note": a.makeup_note}
             for a in recent_attendances
         ],
         "test_scores": [
@@ -267,6 +391,7 @@ def get_student_detail(student_id: int, db: Session) -> Optional[dict]:
                 "id": ts.id,
                 "test_id": ts.test_id,
                 "test_name": ts.test_name,
+                "test_type": ts.test_type,
                 "subject": ts.subject,
                 "raw_score": ts.raw_score,
                 "rank": ts.rank,
