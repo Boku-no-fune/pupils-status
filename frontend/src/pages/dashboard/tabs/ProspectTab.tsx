@@ -7,6 +7,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { X } from 'lucide-react'
 import { prospectsApi } from '@/api/prospects'
 import { gradeLabel } from '@/components/ui/GradeLabel'
@@ -21,6 +22,7 @@ const STATUS_STYLE: Record<string, string> = {
 }
 
 export default function ProspectTab() {
+  const navigate = useNavigate()
   const { data: prospects, isLoading } = useQuery({ queryKey: ['prospects'], queryFn: () => prospectsApi.list() })
   const { data: funnel } = useQuery({ queryKey: ['prospect-funnel'], queryFn: () => prospectsApi.funnel() })
   const [editing, setEditing] = useState<{ prospect: Prospect; stage: ProspectStage } | null>(null)
@@ -62,7 +64,9 @@ export default function ProspectTab() {
           <tbody className="divide-y divide-gray-100">
             {prospects?.map((p) => (
               <tr key={p.id} className="hover:bg-gray-50">
-                <td className="sticky left-0 bg-white px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{p.name}</td>
+                <td className="sticky left-0 bg-white px-3 py-2 font-medium whitespace-nowrap">
+                  <button onClick={() => navigate(`/prospects/${p.id}`)} className="text-blue-700 hover:underline">{p.name}</button>
+                </td>
                 <td className="px-3 py-2 text-gray-500">{p.grade ? gradeLabel(p.grade) : '—'}</td>
                 <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{p.source || '—'}</td>
                 {STAGES.map((stageName) => {

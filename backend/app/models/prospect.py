@@ -35,6 +35,8 @@ class Prospect(Base):
     stages = relationship("ProspectStage", back_populates="prospect",
                           order_by="ProspectStage.sort_order",
                           cascade="all, delete-orphan")
+    staff_notes = relationship("StaffNote", back_populates="prospect",
+                               order_by="StaffNote.occurred_at.desc()")
     assigned_teacher = relationship("User", foreign_keys=[assigned_to])
 
 

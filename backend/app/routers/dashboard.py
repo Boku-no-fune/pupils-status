@@ -27,22 +27,40 @@ from app.models.student import Student
 router = APIRouter(prefix="/dashboard", tags=["ダッシュボード"])
 
 
+def teacher_student_ids(db: Session, user: User):
+    """講師の担当生徒ID一覧 (複数担当 student_teachers + 代表担当)。講師以外はNone。"""
+    from app.models.class_group import student_teachers
+    ids = {r[0] for r in db.query(student_teachers.c.student_id).filter(student_teachers.c.user_id == user.id).all()}
+    ids |= {r[0] for r in db.query(Student.id).filter(Student.assigned_teacher_id == user.id).all()}
+    return list(ids)
+
+
+def effective_student_ids(db: Session, user: User, show_all: bool):
+    """講師かつ show_all でない場合のみ担当生徒IDで絞り込む。それ以外は None (絞り込みなし)。"""
+    if user.role == "teacher" and not show_all:
+        return teacher_student_ids(db, user)
+    return None
+
+
 @router.get("/stats")
 def dashboard_stats(
     classroom_id: Optional[int] = Query(None),
+    show_all: bool = Query(False),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "room_manager")),
+    current_user: User = Depends(require_roles("admin", "room_manager", "teacher")),
 ):
-    """ダッシュボード上部サマリーカード"""
+    """ダッシュボード上部サマリーカード。講師は既定で担当生徒のみ集計。"""
     if current_user.role == "room_manager" and not classroom_id:
         classroom_id = current_user.classroom_id
-    return get_dashboard_stats(db, classroom_id)
+    sids = effective_student_ids(db, current_user, show_all)
+    return get_dashboard_stats(db, classroom_id, sids)
 
 
 @router.get("/student-list")
 def student_list_tab(
     status: Optional[str] = Query(None),
     grade: Optional[int] = Query(None),
+    class_group_id: Optional[int] = Query(None),
     teacher_id: Optional[int] = Query(None),
     classroom_id: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
@@ -50,21 +68,23 @@ def student_list_tab(
     division: Optional[str] = Query(None),
     sort_by: str = Query("grade"),
     sort_dir: str = Query("asc"),
+    show_all: bool = Query(False),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Tab1: 生徒一覧 (会員番号・クラス・出席率・成績変化付き)"""
+    """Tab1: 生徒一覧 (会員番号・クラス・出席率・成績変化付き)。講師は既定で担当生徒のみ。"""
     if current_user.role == "room_manager" and not classroom_id:
         classroom_id = current_user.classroom_id
-    elif current_user.role == "teacher":
+    elif current_user.role == "teacher" and not show_all:
         teacher_id = current_user.id
 
     return get_student_list(
         db=db,
         status=status,
         grade=grade,
+        class_group_id=class_group_id,
         teacher_id=teacher_id,
         classroom_id=classroom_id,
         search=search,
@@ -81,13 +101,19 @@ def student_list_tab(
 def stat_students(
     kind: str = Query(..., description="on_leave / high_risk / low_attendance"),
     classroom_id: Optional[int] = Query(None),
+    show_all: bool = Query(False),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "room_manager")),
+    current_user: User = Depends(require_roles("admin", "room_manager", "teacher")),
 ):
     """上部サマリーカードのドリルダウン (クリックで該当生徒をポップアップ表示)"""
     if current_user.role == "room_manager" and not classroom_id:
         classroom_id = current_user.classroom_id
-    return get_stat_students(db, kind, classroom_id)
+    result = get_stat_students(db, kind, classroom_id)
+    sids = effective_student_ids(db, current_user, show_all)
+    if sids is not None:
+        sset = set(sids)
+        result = [r for r in result if r.get("id") in sset]
+    return result
 
 
 @router.get("/classes")
@@ -117,13 +143,15 @@ def list_classes(
 @router.get("/learning-progress")
 def learning_progress_tab(
     classroom_id: Optional[int] = Query(None),
+    show_all: bool = Query(False),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "room_manager")),
+    current_user: User = Depends(require_roles("admin", "room_manager", "teacher")),
 ):
-    """Tab5: 学習進捗 (映像視聴ログ・宿題提出率)"""
+    """Tab5: 学習進捗 (映像視聴ログ・宿題提出率)。講師は既定で担当生徒のみ。"""
     if current_user.role == "room_manager" and not classroom_id:
         classroom_id = current_user.classroom_id
-    return get_learning_progress(db, classroom_id)
+    sids = effective_student_ids(db, current_user, show_all)
+    return get_learning_progress(db, classroom_id, sids)
 
 
 @router.get("/attendance-trend")
@@ -132,7 +160,7 @@ def attendance_trend_tab(
     class_group_id: Optional[int] = Query(None),
     months: int = Query(6, ge=1, le=12),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "room_manager")),
+    current_user: User = Depends(require_roles("admin", "room_manager", "teacher")),
 ):
     """Tab2: 月別出席率推移 (折れ線グラフ用、クラス別絞り込み可)"""
     if current_user.role == "room_manager" and not classroom_id:
@@ -147,7 +175,7 @@ def score_trend_tab(
     test_type: Optional[str] = Query(None),
     months: int = Query(6, ge=1, le=24),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "room_manager")),
+    current_user: User = Depends(require_roles("admin", "room_manager", "teacher")),
 ):
     """Tab2: 科目別平均スコア推移 (クラス別・試験種別切替可)"""
     if current_user.role == "room_manager" and not classroom_id:
@@ -158,38 +186,51 @@ def score_trend_tab(
 @router.get("/risk-students")
 def risk_students_tab(
     classroom_id: Optional[int] = Query(None),
+    show_all: bool = Query(False),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "room_manager")),
+    current_user: User = Depends(require_roles("admin", "room_manager", "teacher")),
 ):
-    """Tab4: リスク生徒一覧 (高→中→低順)"""
+    """Tab4: リスク生徒一覧 (高→中→低順)。講師は既定で担当生徒のみ。"""
     if current_user.role == "room_manager" and not classroom_id:
         classroom_id = current_user.classroom_id
-    return get_all_risk_students(db, classroom_id)
+    result = get_all_risk_students(db, classroom_id)
+    sids = effective_student_ids(db, current_user, show_all)
+    if sids is not None:
+        sset = set(sids)
+        result = [r for r in result if r.get("student_id") in sset]
+    return result
 
 
 @router.get("/activity-matrix")
 def activity_matrix(
     months: int = Query(6, ge=1, le=12),
     classroom_id: Optional[int] = Query(None),
+    show_all: bool = Query(False),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "room_manager")),
+    current_user: User = Depends(require_roles("admin", "room_manager", "teacher")),
 ):
-    """スタッフ記録・保護者アプローチの月別実施状況 (生徒×月のマトリクス)"""
+    """スタッフ記録・保護者アプローチの月別実施状況 (生徒×月のマトリクス)。講師は既定で担当生徒のみ。"""
     if current_user.role == "room_manager" and not classroom_id:
         classroom_id = current_user.classroom_id
-    return get_activity_matrix(db, months, classroom_id)
+    sids = effective_student_ids(db, current_user, show_all)
+    return get_activity_matrix(db, months, classroom_id, sids)
 
 
 @router.get("/map-data")
 def map_data(
+    show_all: bool = Query(False),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "room_manager")),
+    current_user: User = Depends(require_roles("admin", "room_manager", "teacher")),
 ):
-    """通塾元(生徒の自宅)・通学校の座標 (地図プロット用)"""
-    students = db.query(Student).filter(
+    """通塾元(生徒の自宅)・通学校の座標 (地図プロット用)。講師は既定で担当生徒のみ。"""
+    q = db.query(Student).filter(
         Student.status.in_(["enrolled", "trial", "on_leave"]),
         Student.home_lat.isnot(None),
-    ).all()
+    )
+    sids = effective_student_ids(db, current_user, show_all)
+    if sids is not None:
+        q = q.filter(Student.id.in_(sids))
+    students = q.all()
 
     student_points = [
         {
@@ -238,7 +279,7 @@ def list_teachers(
 def sales_progress_tab(
     period: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "room_manager")),
+    current_user: User = Depends(require_roles("admin", "room_manager", "teacher")),
 ):
     """Tab3: 営業目標進捗"""
     return get_sales_progress(db, period)

@@ -25,10 +25,12 @@ def _month_keys(months: int) -> List[str]:
     return keys
 
 
-def get_activity_matrix(db: Session, months: int = 6, classroom_id: Optional[int] = None) -> Dict:
+def get_activity_matrix(db: Session, months: int = 6, classroom_id: Optional[int] = None,
+                        student_ids: Optional[list] = None) -> Dict:
     """
     生徒 × 月 の実施回数マトリクス。
     各セルは スタッフ記録 + 保護者アプローチ の合計回数。
+    student_ids を指定すると、その生徒だけに絞り込む (講師の担当生徒フィルタ用)。
     """
     month_keys = _month_keys(months)
     month_set = set(month_keys)
@@ -36,6 +38,8 @@ def get_activity_matrix(db: Session, months: int = 6, classroom_id: Optional[int
     q = db.query(Student).filter(Student.status.in_(["enrolled", "trial", "on_leave"]))
     if classroom_id:
         q = q.filter(Student.classroom_id == classroom_id)
+    if student_ids is not None:
+        q = q.filter(Student.id.in_(student_ids))
     students = q.all()
     student_ids = [s.id for s in students]
     if not student_ids:
@@ -54,15 +58,23 @@ def get_activity_matrix(db: Session, months: int = 6, classroom_id: Optional[int
         if mk in month_set:
             contact_counts[c.student_id][mk] += 1
 
+    current_month = month_keys[-1] if month_keys else None
+
     rows = []
     for s in students:
+        enrolled_month = s.enrolled_at.strftime("%Y-%m") if s.enrolled_at else None
         cells = []
         total = 0
         for mk in month_keys:
+            # 入会前の月は enrolled=False (画面では「-」表示)
+            enrolled = (enrolled_month is None) or (mk >= enrolled_month)
             sc = staff_counts[s.id].get(mk, 0)
             cc = contact_counts[s.id].get(mk, 0)
-            cells.append({"month": mk, "staff": sc, "contact": cc, "total": sc + cc})
+            cells.append({"month": mk, "staff": sc, "contact": cc, "total": sc + cc, "enrolled": enrolled})
             total += sc + cc
+        # 当月に在籍しているのにアプローチが0件 → 強調対象
+        current_cell = next((c for c in cells if c["month"] == current_month), None)
+        needs_attention = bool(current_cell and current_cell["enrolled"] and current_cell["total"] == 0)
         rows.append({
             "student_id": s.id,
             "student_name": s.name,
@@ -70,10 +82,11 @@ def get_activity_matrix(db: Session, months: int = 6, classroom_id: Optional[int
             "class_label": s.class_group.name if s.class_group else None,
             "cells": cells,
             "total": total,
+            "needs_attention": needs_attention,
         })
 
-    # 実施が多い順
-    rows.sort(key=lambda r: r["total"], reverse=True)
+    # 当月未アプローチを上に、その後は実施が多い順
+    rows.sort(key=lambda r: (not r["needs_attention"], -r["total"]))
     return {"months": month_keys, "rows": rows}
 
 

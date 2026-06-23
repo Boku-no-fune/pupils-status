@@ -11,6 +11,7 @@ import os
 import sys
 import argparse
 import random
+import re
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
@@ -33,6 +34,7 @@ from app.models import (
     SalesAction, SalesGoal,
     StaffNote, VideoLessonLog,
     Prospect, ProspectStage,
+    ApproachInstruction,
 )
 from app.database import Base
 from app.services.auth_service import hash_password
@@ -187,6 +189,48 @@ SCHOOL_COORDS = {
 PROSPECT_SOURCES = ["HP問い合わせ", "チラシ", "紹介", "看板", "Web広告", "電話"]
 PROSPECT_STAGES = ["問い合わせ", "資料請求", "入会テスト", "体験授業", "イベント参加", "季節講習受講"]
 STAGE_STATUSES = ["未対応", "対応中", "完了"]
+PROSPECT_STAFF_NOTE_CONTENTS = [
+    "保護者へ電話。入塾を前向きに検討中。#フォロー",
+    "体験授業の日程を案内。#体験",
+    "資料を郵送。週明けに再連絡予定。#資料",
+    "入会テストの結果を説明。学力は標準域。#成績",
+    "兄が当塾在籍。紹介経由で関心高い。#紹介",
+]
+
+# アプローチ指示 (本部・教室長が出す)。一部はPDF添付想定。
+APPROACH_INSTRUCTIONS = [
+    {
+        "title": "返却テストの説明と夏期講習の案内",
+        "content": "6月第2週は、返却された塾内試験Aの結果を保護者に丁寧に説明し、あわせて夏期講習の意義（弱点補強・受験対策）を必ず伝えてください。",
+        "target_type": "全体", "target_value": None, "period": "2026-06 第2週", "with_pdf": True,
+    },
+    {
+        "title": "中3 後期特訓講座の意義説明",
+        "content": "中3保護者には、後期特訓講座が入試直前期の得点力強化に直結することを、過去の合格実績を交えて説明してください。",
+        "target_type": "学年", "target_value": "9", "period": "2026-06 第3週", "with_pdf": True,
+    },
+    {
+        "title": "集団部門 席替えと座席方針の連絡",
+        "content": "集団部門は今月より席替えを実施します。保護者から問い合わせがあれば学習集中の観点である旨を説明してください。",
+        "target_type": "部門", "target_value": "集団", "period": "2026-06", "with_pdf": False,
+    },
+    {
+        "title": "3T-1 難関クラス 模試結果フォロー",
+        "content": "3T-1の生徒には、直近の業者模試Aの偏差値推移を個別に共有し、志望校との距離を具体的に伝えてください。",
+        "target_type": "クラス", "target_value": "3T-1", "period": "2026-06 第2週", "with_pdf": False,
+    },
+]
+
+# 添付PDFのダミー (最小の有効なPDFバイナリをbase64化)
+DUMMY_PDF_BASE64 = (
+    "JVBERi0xLjQKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAw"
+    "IG9iago8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PgplbmRvYmoKMyAwIG9iago8"
+    "PC9UeXBlL1BhZ2UvUGFyZW50IDIgMCBSL01lZGlhQm94WzAgMCAyMDAgMjAwXT4+CmVuZG9iagp4"
+    "cmVmCjAgNAowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMDkgMDAwMDAgbiAKMDAwMDAwMDA1"
+    "MiAwMDAwMCBuIAowMDAwMDAwMTAxIDAwMDAwIG4gCnRyYWlsZXIKPDwvU2l6ZSA0L1Jvb3QgMSAw"
+    "IFI+PgpzdGFydHhyZWYKMTczCiUlRU9G"
+)
+
 PROSPECT_STAGE_MEMOS = {
     "問い合わせ": ["HPフォームより問い合わせ。", "電話で受講相談。", "知人の紹介で来塾相談。"],
     "資料請求": ["パンフレット送付済み。", "資料DL後フォロー連絡。"],
@@ -212,6 +256,8 @@ def clear_all_tables(db: Session):
     # 多対多の関連テーブルを先に削除
     db.execute(student_teachers.delete())
     db.execute(class_teachers.delete())
+    db.query(ApproachInstruction).delete()
+    db.query(StaffNote).delete()  # prospect紐づき含め先に削除
     db.query(ProspectStage).delete()
     db.query(Prospect).delete()
     db.query(Referral).delete()
@@ -1169,6 +1215,38 @@ def seed_sales(db: Session, students_data: list, users: dict):
         )
         db.add(action)
 
+    # ===== 中3後期特訓講座 (対象は中3=grade 9 のみ) =====
+    goal2 = SalesGoal(
+        goal_type="course_signup",
+        target_product="中３後期特訓講座",
+        target_count=20,
+        period="2026-autumn",
+        created_by=admin.id,
+    )
+    db.add(goal2)
+    db.flush()
+
+    grade9 = [s for s in enrolled_students if s.grade == 9]
+    for idx, student in enumerate(grade9):
+        r = idx / max(1, len(grade9))
+        if r < 0.5:
+            status = "signed_up"
+        elif r < 0.75:
+            status = "in_progress"
+        elif r < 0.85:
+            status = "declined"
+        else:
+            status = "pending"
+        db.add(SalesAction(
+            student_id=student.id,
+            assigned_to=random.choice(teachers).id,
+            action_type="visit",
+            target_product="中３後期特訓講座",
+            status=status,
+            note=_make_action_note(status),
+            actioned_at=datetime.combine(date.today() - timedelta(days=random.randint(3, 40)), datetime.min.time()),
+        ))
+
 
 def _make_action_note(status: str) -> str:
     """アクション状況に応じたメモを生成"""
@@ -1247,9 +1325,42 @@ def seed_prospects(db: Session, users: dict):
                 sort_order=s_idx,
                 occurred_at=occurred,
             ))
+
+        # 未入会生徒のスタッフ記録 (入会時に引き継がれる想定)
+        for _ in range(random.randint(1, 3)):
+            content = random.choice(PROSPECT_STAFF_NOTE_CONTENTS)
+            tags = re.findall(r"#[^\s#　]+", content)
+            db.add(StaffNote(
+                prospect_id=p.id,
+                teacher_id=random.choice(teachers).id,
+                note_type="その他",
+                content=content,
+                tags=tags or None,
+                occurred_at=datetime.combine(
+                    first_contact + timedelta(days=random.randint(1, 60)),
+                    datetime.strptime(f"{random.randint(10,18)}:00", "%H:%M").time(),
+                ),
+            ))
         prospects.append(p)
 
     return prospects
+
+
+def seed_approach_instructions(db: Session, users: dict):
+    """本部・教室長が出すアプローチ指示を生成 (一部PDF添付)"""
+    admin = users["admin"]
+    manager = users["room_manager"]
+    for spec in APPROACH_INSTRUCTIONS:
+        db.add(ApproachInstruction(
+            title=spec["title"],
+            content=spec["content"],
+            target_type=spec["target_type"],
+            target_value=spec["target_value"],
+            period=spec["period"],
+            pdf_data=("data:application/pdf;base64," + DUMMY_PDF_BASE64) if spec["with_pdf"] else None,
+            pdf_filename="指示資料.pdf" if spec["with_pdf"] else None,
+            created_by=random.choice([admin.id, manager.id]),
+        ))
 
 
 def _seed_referrals(db: Session, students_data: list):
@@ -1333,6 +1444,10 @@ def main():
         # 未入会(見込み)生徒
         prospects = seed_prospects(db, users)
         print(f"  未入会(見込み)生徒作成: {len(prospects)} 名")
+
+        # アプローチ指示
+        seed_approach_instructions(db, users)
+        print(f"  アプローチ指示作成: {len(APPROACH_INSTRUCTIONS)} 件")
 
         db.commit()
         print("\nシードデータ生成完了!")

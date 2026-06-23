@@ -15,10 +15,8 @@ import type {
 } from '@/types'
 
 export const dashboardApi = {
-  stats: async (classroomId?: number): Promise<DashboardStats> => {
-    const { data } = await apiClient.get('/api/dashboard/stats', {
-      params: classroomId ? { classroom_id: classroomId } : {},
-    })
+  stats: async (showAll = false): Promise<DashboardStats> => {
+    const { data } = await apiClient.get('/api/dashboard/stats', { params: { show_all: showAll } })
     return data
   },
 
@@ -27,9 +25,9 @@ export const dashboardApi = {
     return data
   },
 
-  statStudents: async (kind: string, classroomId?: number): Promise<StatStudent[]> => {
+  statStudents: async (kind: string, showAll = false): Promise<StatStudent[]> => {
     const { data } = await apiClient.get('/api/dashboard/stat-students', {
-      params: { kind, classroom_id: classroomId },
+      params: { kind, show_all: showAll },
     })
     return data
   },
@@ -58,9 +56,9 @@ export const dashboardApi = {
     return data
   },
 
-  riskStudents: async (classroomId?: number): Promise<RiskStudent[]> => {
+  riskStudents: async (showAll = false): Promise<RiskStudent[]> => {
     const { data } = await apiClient.get('/api/dashboard/risk-students', {
-      params: classroomId ? { classroom_id: classroomId } : {},
+      params: { show_all: showAll },
     })
     return data
   },
@@ -72,20 +70,20 @@ export const dashboardApi = {
     return data
   },
 
-  learningProgress: async (classroomId?: number): Promise<LearningProgress> => {
+  learningProgress: async (showAll = false): Promise<LearningProgress> => {
     const { data } = await apiClient.get('/api/dashboard/learning-progress', {
-      params: classroomId ? { classroom_id: classroomId } : {},
+      params: { show_all: showAll },
     })
     return data
   },
 
-  activityMatrix: async (months = 6): Promise<ActivityMatrix> => {
-    const { data } = await apiClient.get('/api/dashboard/activity-matrix', { params: { months } })
+  activityMatrix: async (months = 6, showAll = false): Promise<ActivityMatrix> => {
+    const { data } = await apiClient.get('/api/dashboard/activity-matrix', { params: { months, show_all: showAll } })
     return data
   },
 
-  mapData: async (): Promise<MapData> => {
-    const { data } = await apiClient.get('/api/dashboard/map-data')
+  mapData: async (showAll = false): Promise<MapData> => {
+    const { data } = await apiClient.get('/api/dashboard/map-data', { params: { show_all: showAll } })
     return data
   },
 }

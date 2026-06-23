@@ -9,6 +9,7 @@ import AppLayout from '@/components/layout/AppLayout'
 import LoginPage from '@/pages/LoginPage'
 import DashboardPage from '@/pages/dashboard/DashboardPage'
 import StudentDetailPage from '@/pages/students/StudentDetailPage'
+import ProspectDetailPage from '@/pages/prospects/ProspectDetailPage'
 
 // 認証ガード
 function RequireAuth({ children }: { children: React.ReactNode }) {
@@ -43,6 +44,9 @@ export default function App() {
 
           {/* 生徒詳細 */}
           <Route path="students/:studentId" element={<StudentDetailPage />} />
+
+          {/* 未入会生徒 詳細 */}
+          <Route path="prospects/:prospectId" element={<ProspectDetailPage />} />
         </Route>
 
         {/* 未知のパスはダッシュボードへ */}

@@ -11,6 +11,8 @@ from sqlalchemy import func, desc
 from app.models.student import Student
 from app.models.attendance import Attendance, RoomLog
 from app.models.test_score import TestScore
+from app.models.homework import Homework
+from app.models.approach_instruction import ApproachInstruction
 from app.services.risk_service import compute_risk_score, compute_attendance_rate
 
 
@@ -84,6 +86,7 @@ def get_student_list(
     db: Session,
     status: Optional[str] = None,
     grade: Optional[int] = None,
+    class_group_id: Optional[int] = None,
     teacher_id: Optional[int] = None,
     classroom_id: Optional[int] = None,
     search: Optional[str] = None,
@@ -108,6 +111,8 @@ def get_student_list(
         query = query.filter(Student.status == status)
     if grade:
         query = query.filter(Student.grade == grade)
+    if class_group_id:
+        query = query.filter(Student.class_group_id == class_group_id)
     if teacher_id:
         # 複数担当 (student_teachers) または代表担当のいずれかに一致
         from app.models.class_group import student_teachers
@@ -317,6 +322,42 @@ def get_student_detail(student_id: int, db: Session) -> Optional[dict]:
         for r in student.referrals_received
     ]
 
+    # この生徒に該当するアプローチ指示
+    from app.routers.approach_instructions import instruction_matches_student
+    all_instructions = db.query(ApproachInstruction).order_by(ApproachInstruction.created_at.desc()).all()
+    approach_instructions = [
+        {
+            "id": ins.id, "title": ins.title, "content": ins.content,
+            "target_type": ins.target_type, "target_value": ins.target_value,
+            "period": ins.period, "has_pdf": bool(ins.pdf_data), "pdf_filename": ins.pdf_filename,
+            "created_by_name": ins.creator.name if ins.creator else None,
+        }
+        for ins in all_instructions if instruction_matches_student(ins, student)
+    ]
+
+    # 宿題提出状況 (直近60日)
+    hw_cutoff = date.today() - timedelta(days=60)
+    homeworks = db.query(Homework).filter(
+        Homework.student_id == student_id,
+        Homework.assigned_date >= hw_cutoff,
+    ).order_by(Homework.assigned_date.desc()).all()
+    hw_total = len(homeworks)
+    hw_submitted = sum(1 for h in homeworks if h.submitted_at is not None)
+    homework_summary = {
+        "total": hw_total,
+        "submitted": hw_submitted,
+        "rate": round(hw_submitted / hw_total * 100, 1) if hw_total else 0,
+        "recent": [
+            {
+                "id": h.id,
+                "assigned_date": h.assigned_date,
+                "submitted": h.submitted_at is not None,
+                "submitted_at": h.submitted_at.date() if h.submitted_at else None,
+            }
+            for h in homeworks[:20]
+        ],
+    }
+
     return {
         "id": student.id,
         "name": student.name,
@@ -366,6 +407,8 @@ def get_student_detail(student_id: int, db: Session) -> Optional[dict]:
         ],
         "referrals_made": referrals_made,
         "referrals_received": referrals_received,
+        "approach_instructions": approach_instructions,
+        "homework_summary": homework_summary,
         "enrollment_events": [
             {"id": e.id, "event_type": e.event_type, "occurred_at": e.occurred_at, "note": e.note}
             for e in student.enrollment_events

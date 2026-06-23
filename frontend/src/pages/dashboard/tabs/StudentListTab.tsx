@@ -9,10 +9,18 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Search, ChevronUp, ChevronDown, Minus, ArrowUpDown } from 'lucide-react'
 import { dashboardApi } from '@/api/dashboard'
+import { useViewStore } from '@/stores/viewStore'
 import { StudentStatusBadge } from '@/components/ui/Badge'
 import { gradeLabel } from '@/components/ui/GradeLabel'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import type { StudentStatus } from '@/types'
+
+const GRADE_OPTIONS = [
+  { value: '', label: '学年: すべて' },
+  ...[1, 2, 3, 4, 5, 6].map((g) => ({ value: String(g), label: `小${g}` })),
+  ...[7, 8, 9].map((g) => ({ value: String(g), label: `中${g - 6}` })),
+  ...[10, 11, 12].map((g) => ({ value: String(g), label: `高${g - 9}` })),
+]
 
 const STATUS_OPTIONS = [
   { value: '', label: 'すべて' },
@@ -52,14 +60,19 @@ const COLUMNS: { key: SortKey | null; label: string }[] = [
 
 export default function StudentListTab() {
   const navigate = useNavigate()
+  const showAll = useViewStore((s) => s.showAll)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [schoolTypeFilter, setSchoolTypeFilter] = useState('')
   const [divisionFilter, setDivisionFilter] = useState('')
+  const [gradeFilter, setGradeFilter] = useState('')
+  const [classFilter, setClassFilter] = useState('')
   const [sortBy, setSortBy] = useState<SortKey>('grade')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [page, setPage] = useState(1)
   const perPage = 20
+
+  const { data: classes } = useQuery({ queryKey: ['classes'], queryFn: () => dashboardApi.classes() })
 
   const toggleSort = (key: SortKey) => {
     if (sortBy === key) {
@@ -72,15 +85,18 @@ export default function StudentListTab() {
   }
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['student-list', search, statusFilter, schoolTypeFilter, divisionFilter, sortBy, sortDir, page],
+    queryKey: ['student-list', search, statusFilter, schoolTypeFilter, divisionFilter, gradeFilter, classFilter, sortBy, sortDir, showAll, page],
     queryFn: () =>
       dashboardApi.studentList({
         search: search || undefined,
         status: statusFilter || undefined,
         school_type: schoolTypeFilter || undefined,
         division: divisionFilter || undefined,
+        grade: gradeFilter ? Number(gradeFilter) : undefined,
+        class_group_id: classFilter ? Number(classFilter) : undefined,
         sort_by: sortBy,
         sort_dir: sortDir,
+        show_all: showAll,
         page,
         per_page: perPage,
       }),
@@ -134,6 +150,27 @@ export default function StudentListTab() {
         >
           {DIVISION_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+
+        <select
+          value={gradeFilter}
+          onChange={(e) => { setGradeFilter(e.target.value); setPage(1) }}
+          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          {GRADE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+
+        <select
+          value={classFilter}
+          onChange={(e) => { setClassFilter(e.target.value); setPage(1) }}
+          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="">クラス: すべて</option>
+          {(classes || []).map((c) => (
+            <option key={c.id} value={c.id}>{c.name}（{c.level}）</option>
           ))}
         </select>
 

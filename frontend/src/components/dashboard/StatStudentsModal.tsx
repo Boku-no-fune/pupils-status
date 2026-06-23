@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { X } from 'lucide-react'
 import { dashboardApi } from '@/api/dashboard'
+import { useViewStore } from '@/stores/viewStore'
 import { gradeLabel } from '@/components/ui/GradeLabel'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 
@@ -18,9 +19,10 @@ interface Props {
 
 export default function StatStudentsModal({ kind, title, onClose }: Props) {
   const navigate = useNavigate()
+  const showAll = useViewStore((s) => s.showAll)
   const { data, isLoading } = useQuery({
-    queryKey: ['stat-students', kind],
-    queryFn: () => dashboardApi.statStudents(kind),
+    queryKey: ['stat-students', kind, showAll],
+    queryFn: () => dashboardApi.statStudents(kind, showAll),
   })
 
   return (

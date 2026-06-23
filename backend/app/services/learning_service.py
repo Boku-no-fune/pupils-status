@@ -13,11 +13,13 @@ from app.models.video_lesson_log import VideoLessonLog
 from app.models.homework import Homework
 
 
-def get_learning_progress(db: Session, classroom_id: Optional[int] = None) -> dict:
+def get_learning_progress(db: Session, classroom_id: Optional[int] = None,
+                          student_ids_filter: Optional[List[int]] = None) -> dict:
     """
     ダッシュボードTab5用 学習進捗集計
     - 映像授業: 月別視聴時間推移 / 科目別視聴時間
     - 宿題: 直近30日の提出率 (生徒別)
+    student_ids_filter を指定すると、その生徒だけに絞り込む (講師の担当生徒フィルタ用)。
     """
 
     # 対象生徒を絞り込む
@@ -26,6 +28,8 @@ def get_learning_progress(db: Session, classroom_id: Optional[int] = None) -> di
     )
     if classroom_id:
         student_query = student_query.filter(Student.classroom_id == classroom_id)
+    if student_ids_filter is not None:
+        student_query = student_query.filter(Student.id.in_(student_ids_filter))
     students = student_query.all()
     student_ids = [s.id for s in students]
 

@@ -5,12 +5,14 @@
  * 右カラム: リスク / スタッフ記録 / プロフィール / 要望クレーム / 英検漢検 / 紹介 / コンタクト / 支払 / 営業
  */
 
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import type { LucideIcon } from 'lucide-react'
 import {
-  ArrowLeft, Calendar, TrendingUp, Phone, CreditCard, Target, AlertTriangle,
-  MessageSquare, Award, Share2, Video, ClipboardList, BookUser,
+  ArrowLeft, Calendar, TrendingUp, CreditCard, Target, AlertTriangle,
+  Award, Share2, Video, ClipboardList, BookUser, ChevronDown, ChevronUp,
+  PenSquare, Megaphone,
 } from 'lucide-react'
 import { studentsApi } from '@/api/students'
 import { gradeLabel } from '@/components/ui/GradeLabel'
@@ -22,6 +24,8 @@ import PhotoUpload from '@/components/ui/PhotoUpload'
 import StaffNoteSection from '@/components/ui/StaffNoteSection'
 import SpecialNotesSection from '@/components/students/SpecialNotesSection'
 import TestScoreSection from '@/components/students/TestScoreSection'
+import HomeworkSection from '@/components/students/HomeworkSection'
+import ApproachInstructionsSection from '@/components/students/ApproachInstructionsSection'
 import {
   PhoneListSection, TeacherAssignSection, ProfileMemoSection,
   ParentRequestSection, ExamCertSection, ReferralSection, VideoHistorySection,
@@ -32,6 +36,7 @@ export default function StudentDetailPage() {
   const { studentId } = useParams<{ studentId: string }>()
   const navigate = useNavigate()
   const id = parseInt(studentId || '0')
+  const [timelineOpen, setTimelineOpen] = useState(false)
 
   const { data: student, isLoading, isError } = useQuery({
     queryKey: ['student-detail', id],
@@ -140,29 +145,30 @@ export default function StudentDetailPage() {
       {/* 特記事項 (最上段コンテナ直下) */}
       <SpecialNotesSection studentId={student.id} notes={student.special_notes} />
 
+      {/* アプローチ指示 (この生徒に該当) */}
+      <Section icon={Megaphone} title="本部・教室長からのアプローチ指示">
+        <ApproachInstructionsSection instructions={student.approach_instructions || []} />
+      </Section>
+
       {/* 2カラムレイアウト */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 左カラム */}
+        {/* メインカラム (左 2/3) */}
         <div className="lg:col-span-2 space-y-6">
-          <Section icon={Calendar} title="イベントタイムライン">
-            {student.enrollment_events.length === 0 ? (
-              <EmptyState text="イベント記録がありません" />
-            ) : (
-              <div className="space-y-3">
-                {[...student.enrollment_events]
-                  .sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime())
-                  .map((event) => (
-                    <div key={event.id} className="flex items-start gap-3">
-                      <div className="w-2 h-2 rounded-full bg-blue-400 mt-2 flex-shrink-0" />
-                      <div>
-                        <span className="text-sm font-medium text-gray-800">{event.event_type}</span>
-                        <span className="text-xs text-gray-400 ml-2">
-                          {new Date(event.occurred_at).toLocaleDateString('ja-JP')}
-                        </span>
-                        {event.note && <p className="text-xs text-gray-500 mt-0.5">{event.note}</p>}
-                      </div>
+          {/* 対応記録（スタッフ記録・保護者アプローチ 統合）— 特記事項直下 */}
+          <Section icon={PenSquare} title="対応記録（スタッフ記録・保護者アプローチ）">
+            <StaffNoteSection studentId={student.id} notes={student.staff_notes || []} />
+            {student.parent_contacts.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <p className="text-xs text-gray-400 mb-2">保護者アプローチ履歴（システム連携）</p>
+                <div className="space-y-2">
+                  {student.parent_contacts.slice(0, 8).map((c) => (
+                    <div key={c.id} className="flex items-start gap-2 text-sm">
+                      <span className="text-xs bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full flex-shrink-0">{c.contact_type}</span>
+                      <span className="flex-1 text-gray-600">{c.summary}</span>
+                      <span className="text-xs text-gray-300 flex-shrink-0">{new Date(c.occurred_at).toLocaleDateString('ja-JP')}</span>
                     </div>
                   ))}
+                </div>
               </div>
             )}
           </Section>
@@ -189,13 +195,52 @@ export default function StudentDetailPage() {
             )}
           </Section>
 
+          <Section icon={ClipboardList} title="宿題提出状況">
+            <HomeworkSection summary={student.homework_summary} />
+          </Section>
+
           <Section icon={Video} title="映像授業 視聴履歴">
             <VideoHistorySection logs={student.video_lesson_logs} />
           </Section>
         </div>
 
-        {/* 右カラム */}
+        {/* 右カラム (1/3) */}
         <div className="space-y-6">
+          {/* イベントタイムライン (折りたたみ) */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+            <button onClick={() => setTimelineOpen(!timelineOpen)} className="w-full flex items-center justify-between">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                <Calendar size={16} className="text-blue-500" /> イベントタイムライン
+                <span className="text-xs text-gray-400">({student.enrollment_events.length})</span>
+              </h2>
+              {timelineOpen ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+            </button>
+            {timelineOpen && (
+              <div className="mt-4">
+                {student.enrollment_events.length === 0 ? (
+                  <EmptyState text="イベント記録がありません" />
+                ) : (
+                  <div className="space-y-3">
+                    {[...student.enrollment_events]
+                      .sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime())
+                      .map((event) => (
+                        <div key={event.id} className="flex items-start gap-3">
+                          <div className="w-2 h-2 rounded-full bg-blue-400 mt-2 flex-shrink-0" />
+                          <div>
+                            <span className="text-sm font-medium text-gray-800">{event.event_type}</span>
+                            <span className="text-xs text-gray-400 ml-2">
+                              {new Date(event.occurred_at).toLocaleDateString('ja-JP')}
+                            </span>
+                            {event.note && <p className="text-xs text-gray-500 mt-0.5">{event.note}</p>}
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {student.risk_score && (
             <Section icon={AlertTriangle} title="リスク・AI提案">
               <div className="space-y-3">
@@ -232,10 +277,6 @@ export default function StudentDetailPage() {
             </Section>
           )}
 
-          <Section icon={MessageSquare} title="スタッフ記録">
-            <StaffNoteSection studentId={student.id} notes={student.staff_notes || []} />
-          </Section>
-
           <Section icon={BookUser} title="プロフィールメモ">
             <ProfileMemoSection studentId={student.id} memos={student.profile_memos} />
           </Section>
@@ -250,25 +291,6 @@ export default function StudentDetailPage() {
 
           <Section icon={Share2} title="紹介・被紹介履歴">
             <ReferralSection made={student.referrals_made} received={student.referrals_received} />
-          </Section>
-
-          <Section icon={Phone} title="保護者コンタクト">
-            {student.parent_contacts.length === 0 ? (
-              <EmptyState text="コンタクト記録がありません" />
-            ) : (
-              <div className="space-y-3">
-                {student.parent_contacts.slice(0, 5).map((c) => (
-                  <div key={c.id} className="border-b border-gray-100 pb-3 last:border-0 last:pb-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-gray-700">{c.contact_type}</span>
-                      <span className="text-xs text-gray-400">{new Date(c.occurred_at).toLocaleDateString('ja-JP')}</span>
-                    </div>
-                    {c.teacher_name && <p className="text-xs text-gray-500">{c.teacher_name}</p>}
-                    {c.summary && <p className="text-xs text-gray-600 mt-1">{c.summary}</p>}
-                  </div>
-                ))}
-              </div>
-            )}
           </Section>
 
           <Section icon={CreditCard} title="支払い状況">

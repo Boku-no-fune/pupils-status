@@ -4,6 +4,7 @@ import type { StudentListResponse, StudentDetail, StaffNote, VideoLessonLog, Tea
 export interface StudentListParams {
   status?: string
   grade?: number
+  class_group_id?: number
   teacher_id?: number
   classroom_id?: number
   search?: string
@@ -11,6 +12,7 @@ export interface StudentListParams {
   division?: string
   sort_by?: string
   sort_dir?: string
+  show_all?: boolean
   page?: number
   per_page?: number
 }

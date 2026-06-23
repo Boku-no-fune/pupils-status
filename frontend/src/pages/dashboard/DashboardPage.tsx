@@ -5,9 +5,11 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Users, TrendingUp, Target, AlertTriangle, BookOpen, CalendarCheck, UserPlus, MapPin } from 'lucide-react'
+import { Users, TrendingUp, Target, AlertTriangle, BookOpen, CalendarCheck, UserPlus, MapPin, Megaphone } from 'lucide-react'
 import clsx from 'clsx'
 import { dashboardApi } from '@/api/dashboard'
+import { useAuthStore } from '@/stores/authStore'
+import { useViewStore } from '@/stores/viewStore'
 import StatCard from '@/components/ui/StatCard'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 import StatStudentsModal from '@/components/dashboard/StatStudentsModal'
@@ -19,6 +21,7 @@ import LearningProgressTab from './tabs/LearningProgressTab'
 import ActivityMatrixTab from './tabs/ActivityMatrixTab'
 import ProspectTab from './tabs/ProspectTab'
 import MapTab from './tabs/MapTab'
+import ApproachInstructionTab from './tabs/ApproachInstructionTab'
 
 type StatKind = 'on_leave' | 'high_risk' | 'low_attendance'
 const STAT_TITLES: Record<StatKind, string> = {
@@ -28,31 +31,49 @@ const STAT_TITLES: Record<StatKind, string> = {
 }
 
 const TABS = [
-  { id: 'students', label: '生徒一覧・ステータス', icon: Users },
-  { id: 'charts', label: '出欠・成績グラフ', icon: TrendingUp },
-  { id: 'sales', label: '営業目標・アプローチ', icon: Target },
-  { id: 'risk', label: 'リスク・AI提案', icon: AlertTriangle },
-  { id: 'learning', label: '学習進捗', icon: BookOpen },
-  { id: 'activity', label: '月別実施状況', icon: CalendarCheck },
-  { id: 'prospects', label: '未入会生徒状況', icon: UserPlus },
-  { id: 'map', label: '通塾元・通学校マップ', icon: MapPin },
+  { id: 'students', label: '生徒一覧・ステータス', icon: Users, adminOnly: false },
+  { id: 'charts', label: '出欠・成績グラフ', icon: TrendingUp, adminOnly: false },
+  { id: 'sales', label: '営業目標・アプローチ', icon: Target, adminOnly: false },
+  { id: 'instructions', label: 'アプローチ指示', icon: Megaphone, adminOnly: true },
+  { id: 'risk', label: 'リスク・AI提案', icon: AlertTriangle, adminOnly: false },
+  { id: 'learning', label: '学習進捗', icon: BookOpen, adminOnly: false },
+  { id: 'activity', label: '月別実施状況', icon: CalendarCheck, adminOnly: false },
+  { id: 'prospects', label: '未入会生徒状況', icon: UserPlus, adminOnly: true },
+  { id: 'map', label: '通塾元・通学校マップ', icon: MapPin, adminOnly: false },
 ]
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState('students')
   const [statModal, setStatModal] = useState<StatKind | null>(null)
+  const user = useAuthStore((s) => s.user)
+  const showAll = useViewStore((s) => s.showAll)
+  const setShowAll = useViewStore((s) => s.setShowAll)
+  const isTeacher = user?.role === 'teacher'
 
   const { data: stats, isLoading: statsLoading } = useQuery({
-    queryKey: ['dashboard-stats'],
-    queryFn: () => dashboardApi.stats(),
+    queryKey: ['dashboard-stats', showAll],
+    queryFn: () => dashboardApi.stats(showAll),
   })
 
   return (
     <div className="p-6 max-w-screen-xl mx-auto">
       {/* ページヘッダー */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">ダッシュボード</h1>
-        <p className="text-sm text-gray-500 mt-1">生徒の状況・営業進捗・リスク管理</p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">ダッシュボード</h1>
+          <p className="text-sm text-gray-500 mt-1">生徒の状況・営業進捗・リスク管理</p>
+        </div>
+        {isTeacher && (
+          <label className="flex items-center gap-2 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-2 shadow-sm cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showAll}
+              onChange={(e) => setShowAll(e.target.checked)}
+              className="accent-blue-600"
+            />
+            全生徒を表示（既定は担当生徒のみ）
+          </label>
+        )}
       </div>
 
       {/* サマリーカード */}
@@ -108,7 +129,7 @@ export default function DashboardPage() {
       {/* タブナビゲーション */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="flex border-b border-gray-200 overflow-x-auto">
-          {TABS.map((tab) => (
+          {TABS.filter((tab) => !tab.adminOnly || !isTeacher).map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -131,6 +152,7 @@ export default function DashboardPage() {
           {activeTab === 'charts' && <AttendanceScoreTab />}
           {activeTab === 'sales' && <SalesTab />}
           {activeTab === 'risk' && <RiskTab />}
+          {activeTab === 'instructions' && <ApproachInstructionTab />}
           {activeTab === 'learning' && <LearningProgressTab />}
           {activeTab === 'activity' && <ActivityMatrixTab />}
           {activeTab === 'prospects' && <ProspectTab />}

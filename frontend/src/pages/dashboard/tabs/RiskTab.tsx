@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle, Lightbulb, TrendingDown, UserX } from 'lucide-react'
 import { dashboardApi } from '@/api/dashboard'
+import { useViewStore } from '@/stores/viewStore'
 import { RiskBadge } from '@/components/ui/Badge'
 import { gradeLabel } from '@/components/ui/GradeLabel'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
@@ -14,10 +15,11 @@ import type { RiskStudent } from '@/types'
 
 export default function RiskTab() {
   const navigate = useNavigate()
+  const showAll = useViewStore((s) => s.showAll)
 
   const { data: riskStudents, isLoading } = useQuery({
-    queryKey: ['risk-students'],
-    queryFn: () => dashboardApi.riskStudents(),
+    queryKey: ['risk-students', showAll],
+    queryFn: () => dashboardApi.riskStudents(showAll),
   })
 
   if (isLoading) return <LoadingSpinner text="リスク分析中..." />

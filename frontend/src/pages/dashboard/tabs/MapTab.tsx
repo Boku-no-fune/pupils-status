@@ -9,11 +9,13 @@ import { useQuery } from '@tanstack/react-query'
 import { MapContainer, TileLayer, CircleMarker, Popup, Polyline } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { dashboardApi } from '@/api/dashboard'
+import { useViewStore } from '@/stores/viewStore'
 import { gradeLabel } from '@/components/ui/GradeLabel'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 
 export default function MapTab() {
-  const { data, isLoading, isError } = useQuery({ queryKey: ['map-data'], queryFn: () => dashboardApi.mapData() })
+  const showAll = useViewStore((s) => s.showAll)
+  const { data, isLoading, isError } = useQuery({ queryKey: ['map-data', showAll], queryFn: () => dashboardApi.mapData(showAll) })
   const [showHomes, setShowHomes] = useState(true)
   const [showSchools, setShowSchools] = useState(true)
   const [showLines, setShowLines] = useState(false)

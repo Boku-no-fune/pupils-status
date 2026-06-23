@@ -17,7 +17,9 @@ class StaffNote(Base):
     __tablename__ = "staff_notes"
 
     id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("students.id"), nullable=False, index=True)
+    # 在籍生 または 未入会(見込み) のいずれかに紐づく
+    student_id = Column(Integer, ForeignKey("students.id"), nullable=True, index=True)
+    prospect_id = Column(Integer, ForeignKey("prospects.id"), nullable=True, index=True)
     teacher_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
     note_type = Column(String(30), nullable=False)   # 電話報告/保護者面談/生徒ミーティング/その他
@@ -29,4 +31,5 @@ class StaffNote(Base):
 
     # リレーション
     student = relationship("Student", back_populates="staff_notes")
+    prospect = relationship("Prospect", back_populates="staff_notes")
     teacher = relationship("User", back_populates="staff_notes")

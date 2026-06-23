@@ -20,6 +20,7 @@ from app.models.sales import SalesAction, SalesGoal
 from app.models.staff_note import StaffNote
 from app.models.video_lesson_log import VideoLessonLog
 from app.models.prospect import Prospect, ProspectStage
+from app.models.approach_instruction import ApproachInstruction
 
 __all__ = [
     "Classroom",
@@ -51,4 +52,5 @@ __all__ = [
     "VideoLessonLog",
     "Prospect",
     "ProspectStage",
+    "ApproachInstruction",
 ]

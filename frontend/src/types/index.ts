@@ -258,6 +258,8 @@ export interface StudentDetail extends Student {
   exam_certifications: ExamCertification[]
   referrals_made: ReferralMade[]
   referrals_received: ReferralReceived[]
+  approach_instructions: ApproachInstruction[]
+  homework_summary: HomeworkSummary
 }
 
 // ===== ダッシュボード =====
@@ -343,6 +345,7 @@ export interface ActivityCell {
   staff: number
   contact: number
   total: number
+  enrolled: boolean
 }
 export interface ActivityRow {
   student_id: number
@@ -351,6 +354,7 @@ export interface ActivityRow {
   class_label?: string
   cells: ActivityCell[]
   total: number
+  needs_attention: boolean
 }
 export interface ActivityMatrix {
   months: string[]
@@ -393,6 +397,56 @@ export interface ProspectFunnelStage {
 export interface ProspectFunnel {
   total_prospects: number
   stages: ProspectFunnelStage[]
+}
+
+// ===== アプローチ指示 =====
+export interface ApproachInstruction {
+  id: number
+  title: string
+  content: string
+  target_type: '全体' | '部門' | '学年' | 'クラス'
+  target_value?: string
+  period?: string
+  has_pdf: boolean
+  pdf_filename?: string
+  created_by_name?: string
+  created_at?: string
+}
+
+// ===== 営業キャンペーン行 =====
+export interface CampaignRow {
+  id: number
+  student_id?: number
+  student_name?: string
+  grade?: number
+  class_label?: string
+  status: 'pending' | 'in_progress' | 'signed_up' | 'declined'
+  action_type: string
+  is_member: boolean
+  note?: string
+  actioned_at?: string
+  assigned_teacher_name?: string
+}
+
+// ===== 宿題 =====
+export interface HomeworkItem {
+  id: number
+  assigned_date: string
+  submitted: boolean
+  submitted_at?: string
+}
+export interface HomeworkSummary {
+  total: number
+  submitted: number
+  rate: number
+  recent: HomeworkItem[]
+}
+
+// ===== 未入会生徒 詳細 =====
+export interface ProspectDetail extends Prospect {
+  address?: string
+  note?: string
+  staff_notes: StaffNote[]
 }
 
 // ===== 地図 =====

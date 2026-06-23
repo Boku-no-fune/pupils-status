@@ -68,6 +68,57 @@ def list_sales_actions(
     ]
 
 
+@router.get("/campaign-rows")
+def campaign_rows(
+    product: str = Query(...),
+    show_all: bool = Query(False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "room_manager", "teacher")),
+):
+    """
+    指定キャンペーン(product)のアプローチ状況一覧。
+    在籍生は「正会員」、それ以外は通常のアクションを表示。クリックで生徒ページへ。
+    講師は既定で担当生徒のみ (show_all=trueで全件)。
+    """
+    from app.models.student import Student
+    from app.models.class_group import student_teachers
+
+    q = db.query(SalesAction).filter(SalesAction.target_product == product)
+
+    if current_user.role == "room_manager":
+        sids = [r[0] for r in db.query(Student.id).filter(Student.classroom_id == current_user.classroom_id).all()]
+        q = q.filter(SalesAction.student_id.in_(sids))
+    elif current_user.role == "teacher" and not show_all:
+        st_sub = db.query(student_teachers.c.student_id).filter(student_teachers.c.user_id == current_user.id).subquery()
+        q = q.filter(
+            (SalesAction.student_id.in_(st_sub)) |
+            (SalesAction.student_id.in_(db.query(Student.id).filter(Student.assigned_teacher_id == current_user.id)))
+        )
+
+    records = q.all()
+    rows = []
+    for r in records:
+        s = r.student
+        is_member = s and s.status == "enrolled"
+        rows.append({
+            "id": r.id,
+            "student_id": r.student_id,
+            "student_name": s.name if s else None,
+            "grade": s.grade if s else None,
+            "class_label": (s.class_group.name if s and s.class_group else None),
+            "status": r.status,
+            "action_type": r.action_type,
+            "is_member": bool(is_member),
+            "note": r.note,
+            "actioned_at": r.actioned_at,
+            "assigned_teacher_name": r.assigned_teacher.name if r.assigned_teacher else None,
+        })
+    # 正会員→申込済→交渉中→… の順で並べる
+    order = {"signed_up": 0, "in_progress": 1, "pending": 2, "declined": 3}
+    rows.sort(key=lambda x: (0 if x["is_member"] else 1, order.get(x["status"], 9)))
+    return rows
+
+
 @router.post("/actions", status_code=201)
 def create_sales_action(
     data: SalesActionCreate,
@@ -140,9 +191,9 @@ def create_goal(
 def get_progress(
     period: Optional[str] = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_roles("admin", "room_manager")),
+    current_user: User = Depends(require_roles("admin", "room_manager", "teacher")),
 ):
-    """営業目標の達成進捗"""
+    """営業目標の達成進捗 (全キャンペーン)"""
     return get_sales_progress(db, period)
 
 

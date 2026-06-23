@@ -9,15 +9,17 @@ import {
   PieChart, Pie, Cell, ResponsiveContainer,
 } from 'recharts'
 import { dashboardApi } from '@/api/dashboard'
+import { useViewStore } from '@/stores/viewStore'
 import { gradeLabel } from '@/components/ui/GradeLabel'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 
 const COLORS = ['#6366f1', '#3b82f6', '#22c55e', '#f59e0b', '#ec4899', '#8b5cf6']
 
 export default function LearningProgressTab() {
+  const showAll = useViewStore((s) => s.showAll)
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['learning-progress'],
-    queryFn: () => dashboardApi.learningProgress(),
+    queryKey: ['learning-progress', showAll],
+    queryFn: () => dashboardApi.learningProgress(showAll),
   })
 
   if (isLoading) return <LoadingSpinner text="学習進捗データを読み込み中..." />

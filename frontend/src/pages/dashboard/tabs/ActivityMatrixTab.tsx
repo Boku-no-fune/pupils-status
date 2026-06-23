@@ -5,16 +5,20 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { X } from 'lucide-react'
 import { dashboardApi } from '@/api/dashboard'
 import { studentsApi } from '@/api/students'
+import { useViewStore } from '@/stores/viewStore'
 import { gradeLabel } from '@/components/ui/GradeLabel'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
 
 export default function ActivityMatrixTab() {
+  const navigate = useNavigate()
+  const showAll = useViewStore((s) => s.showAll)
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['activity-matrix'],
-    queryFn: () => dashboardApi.activityMatrix(6),
+    queryKey: ['activity-matrix', showAll],
+    queryFn: () => dashboardApi.activityMatrix(6, showAll),
   })
   const [popup, setPopup] = useState<{ studentId: number; studentName: string; month: string } | null>(null)
 
@@ -25,7 +29,7 @@ export default function ActivityMatrixTab() {
     <div className="space-y-4">
       <div>
         <h3 className="text-base font-semibold text-gray-800 mb-1">スタッフ記録・保護者アプローチ 月別実施状況</h3>
-        <p className="text-xs text-gray-400 mb-4">数字をクリックすると、その月の記録内容を表示します（スタッフ記録＋保護者アプローチの合計）</p>
+        <p className="text-xs text-gray-400 mb-2">数字をクリックでその月の記録を表示。生徒名クリックで生徒ページへ。「-」は未入会の月、当月アプローチ0件の生徒は <span className="bg-red-50 text-red-600 px-1 rounded">赤</span> で強調。</p>
       </div>
 
       <div className="overflow-x-auto">
@@ -45,13 +49,20 @@ export default function ActivityMatrixTab() {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {data.rows.map((row) => (
-              <tr key={row.student_id} className="hover:bg-gray-50">
-                <td className="sticky left-0 bg-white px-3 py-2 font-medium text-gray-900 whitespace-nowrap">{row.student_name}</td>
+              <tr key={row.student_id} className={row.needs_attention ? 'bg-red-50/60 hover:bg-red-50' : 'hover:bg-gray-50'}>
+                <td className={`sticky left-0 px-3 py-2 font-medium whitespace-nowrap ${row.needs_attention ? 'bg-red-50/60' : 'bg-white'}`}>
+                  <button onClick={() => navigate(`/students/${row.student_id}`)} className="text-blue-700 hover:underline">
+                    {row.student_name}
+                  </button>
+                  {row.needs_attention && <span className="ml-1 text-[10px] text-red-500">当月未</span>}
+                </td>
                 <td className="px-3 py-2 text-gray-500">{gradeLabel(row.grade)}</td>
                 <td className="px-3 py-2 text-gray-500">{row.class_label || '—'}</td>
                 {row.cells.map((cell) => (
                   <td key={cell.month} className="px-3 py-2 text-center">
-                    {cell.total > 0 ? (
+                    {!cell.enrolled ? (
+                      <span className="text-gray-300" title="未入会の月">-</span>
+                    ) : cell.total > 0 ? (
                       <button
                         onClick={() => setPopup({ studentId: row.student_id, studentName: row.student_name, month: cell.month })}
                         title={`スタッフ記録 ${cell.staff} / 保護者 ${cell.contact}`}
@@ -60,7 +71,7 @@ export default function ActivityMatrixTab() {
                         {cell.total}
                       </button>
                     ) : (
-                      <span className="text-gray-300">·</span>
+                      <span className="text-gray-400">0</span>
                     )}
                   </td>
                 ))}

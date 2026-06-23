@@ -5,8 +5,8 @@ POST   /api/prospects/{id}/stages              — ステージの状況・メ�
 GET    /api/prospects/funnel                   — ファネル集計 (営業タブ連携用)
 """
 
-from typing import Optional
-from datetime import date
+from typing import Optional, List
+from datetime import date, datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User
 from app.models.prospect import Prospect, ProspectStage
+from app.models.staff_note import StaffNote
 from app.dependencies.auth import get_current_user, require_roles
 
 router = APIRouter(prefix="/prospects", tags=["未入会生徒"])
@@ -71,6 +72,74 @@ def list_prospects(
     """未入会生徒の一覧 (各ステージの状況付き)"""
     prospects = db.query(Prospect).order_by(Prospect.first_contact_at.desc()).all()
     return [_serialize(p) for p in prospects]
+
+
+@router.get("/{prospect_id}")
+def get_prospect(
+    prospect_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "room_manager", "teacher")),
+):
+    """未入会生徒の詳細 (ステージ + スタッフ記録)。入会時にこの記録が引き継がれる想定。"""
+    p = db.query(Prospect).filter(Prospect.id == prospect_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="見込み客が見つかりません")
+    data = _serialize(p)
+    data["address"] = p.address
+    data["note"] = p.note
+    data["staff_notes"] = [
+        {
+            "id": n.id, "note_type": n.note_type, "content": n.content,
+            "tags": n.tags or [], "occurred_at": n.occurred_at,
+            "teacher_name": n.teacher.name if n.teacher else None,
+        }
+        for n in p.staff_notes
+    ]
+    return data
+
+
+class ProspectNoteCreate(BaseModel):
+    note_type: str = "その他"
+    content: str
+    occurred_at: Optional[datetime] = None
+
+
+@router.post("/{prospect_id}/staff-notes", status_code=201)
+def create_prospect_note(
+    prospect_id: int,
+    data: ProspectNoteCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "room_manager", "teacher")),
+):
+    import re
+    p = db.query(Prospect).filter(Prospect.id == prospect_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="見込み客が見つかりません")
+    tags = re.findall(r"#[^\s#　]+", data.content) or None
+    note = StaffNote(
+        prospect_id=prospect_id, teacher_id=current_user.id,
+        note_type=data.note_type, content=data.content, tags=tags,
+        occurred_at=data.occurred_at or datetime.now(),
+    )
+    db.add(note)
+    db.commit()
+    db.refresh(note)
+    return {"id": note.id, "message": "記録しました"}
+
+
+@router.delete("/{prospect_id}/staff-notes/{note_id}")
+def delete_prospect_note(
+    prospect_id: int, note_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles("admin", "room_manager", "teacher")),
+):
+    note = db.query(StaffNote).filter(
+        StaffNote.id == note_id, StaffNote.prospect_id == prospect_id).first()
+    if not note:
+        raise HTTPException(status_code=404, detail="記録が見つかりません")
+    db.delete(note)
+    db.commit()
+    return {"message": "削除しました"}
 
 
 class StageUpsert(BaseModel):

@@ -15,11 +15,14 @@ from app.models.sales import SalesAction, SalesGoal
 from app.services.risk_service import compute_attendance_rate
 
 
-def get_dashboard_stats(db: Session, classroom_id: Optional[int] = None) -> Dict:
+def get_dashboard_stats(db: Session, classroom_id: Optional[int] = None,
+                        student_ids: Optional[list] = None) -> Dict:
     """ダッシュボード上部サマリーカード用の集計"""
     query = db.query(Student)
     if classroom_id:
         query = query.filter(Student.classroom_id == classroom_id)
+    if student_ids is not None:
+        query = query.filter(Student.id.in_(student_ids))
 
     all_students = query.all()
 
